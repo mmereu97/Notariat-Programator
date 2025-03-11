@@ -12,8 +12,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QDialog, QDialogButtonBox, QMessageBox, QFormLayout,
                             QCalendarWidget, QCheckBox, QTextEdit, QToolTip)
 from PyQt5.QtCore import Qt, QSize, QDate
-from PyQt5.QtGui import QFont, QColor, QPalette
-
+from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 
 class AddEditAppointmentDialog(QDialog):
     """Dialog pentru adăugarea sau editarea unei programări"""
@@ -211,7 +210,10 @@ class NotarialScheduler(QMainWindow):
         # Configurare fereastră principală
         self.setWindowTitle("Programator Acte Notariale")
         self.setMinimumSize(2560, 1300)
-        
+    
+        # Adăugăm setarea iconiței aici
+        self.set_application_icon()
+
         # Nume stație/computer
         self.computer_name = socket.gethostname()
         
@@ -347,6 +349,24 @@ class NotarialScheduler(QMainWindow):
             
             # Salvăm în JSON pentru utilizare viitoare
             self.save_document_types_to_json()
+
+    def set_application_icon(self):
+        """Setează iconița aplicației pentru taskbar și titlu"""
+        try:
+            # Calea către iconița aplicației
+            if getattr(sys, 'frozen', False):
+                # Dacă rulăm din executabil
+                application_path = os.path.dirname(sys.executable)
+            else:
+                # Dacă rulăm din sursă
+                application_path = os.path.dirname(os.path.abspath(__file__))
+                
+            icon_path = os.path.join(application_path, "icon.ico")
+            
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            print(f"Eroare la setarea iconiței: {e}")
 
     # 2. Modificare metodă pentru încărcarea tipurilor de documente, inclusiv flagul de evidențiere
     def load_document_types(self):
