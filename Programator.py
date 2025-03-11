@@ -493,7 +493,7 @@ class NotarialScheduler(QMainWindow):
             header_text = f"{day_date.day} {self.month_names_ro[day_date.month-1]}\n{day_name}"
             day_header = QLabel(header_text)
             day_header.setFont(QFont("Arial", 16, QFont.Bold))  # Font mai mare și îngroșat
-            day_header.setStyleSheet("color: white;")  # Text alb pentru contrast
+            day_header.setStyleSheet("color: #FFD700;")  # Text auriu conform cerințelor
         else:
             header_text = f"{day_date.day} {self.month_names_ro[day_date.month-1]}\n{day_name}"
             day_header = QLabel(header_text)
