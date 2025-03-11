@@ -38,17 +38,24 @@ PyQt5
 
 Clonați repository-ul:
 
-bashCopygit clone https://github.com/utilizator/programator-acte-notariale.git
+```bash
+git clone https://github.com/utilizator/programator-acte-notariale.git
 cd programator-acte-notariale
+```
 
 Instalați dependențele:
 
-bashCopypip install -r requirements.txt
+```bash
+pip install -r requirements.txt
+```
 
 Rulați aplicația:
 
-bashCopypython programator.py
-Ghid de utilizare
+```bash
+python programator.py
+```
+
+## Ghid de utilizare
 
 ## Navigare în calendar
 
