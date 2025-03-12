@@ -48,13 +48,6 @@ Programator Acte Notariale este o aplicație pentru birouri notariale care permi
 - **JSON:** Format pentru salvarea configurațiilor de tipuri de documente
 - **Requests & BeautifulSoup4:** Pentru preluarea cursului valutar BNR
 
-## Cerințe sistem
-
-- Python 3.6 sau mai recent
-- PyQt5
-- SQLite
-- Biblioteci Python: requests, BeautifulSoup4 (pentru cursul valutar)
-
 ## Instalare
 
 ### Pași de instalare
