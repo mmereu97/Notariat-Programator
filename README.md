@@ -118,24 +118,15 @@ Aplicația folosește SQLite pentru stocarea datelor în fișierul notarial_sche
 - **Tabelul appointments** - stochează toate programările, inclusiv istoricul de modificări
 - **Fișierul document_types.json** - conține configurația pentru tipurile de documente și culorile asociate
 
-## Actualizări recente
-
-Sistem de 4 culori configurabile pentru tipurile de documente
-Redenumire tipuri de documente cu dublu-click
-Sortare alfabetică automată a tipurilor de documente
-Widget pentru cursul valutar BNR actualizat în timp real
-Mecanism de securitate pentru utilizare în rețea
-Îmbunătățirea interfeței și corectarea erorilor
-
 ## Contribuție
 Contribuțiile sunt binevenite! Pentru a contribui la acest proiect:
 
-Fork-ați repository-ul
-Creați un branch nou: `git checkout -b feature/functionalitate-noua`
-Faceți modificările dorite
-Commit-ați modificările: `git commit -m 'Adăugare funcționalitate nouă'`
-Push la branch: `git push origin feature/functionalitate-noua`
-Creați un Pull Request
+-Fork-ați repository-ul
+-Creați un branch nou: `git checkout -b feature/functionalitate-noua`
+-Faceți modificările dorite
+-Commit-ați modificările: `git commit -m 'Adăugare funcționalitate nouă'`
+-Push la branch: `git push origin feature/functionalitate-noua`
+-Creați un Pull Request
 
 ## Licență
 Acest proiect este freeware
