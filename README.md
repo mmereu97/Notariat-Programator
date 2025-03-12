@@ -1,7 +1,6 @@
 # Programator Acte Notariale
 
-O aplicație desktop pentru gestionarea și programarea actelor notariale, dezvoltată în Python
-cu PyQt5.
+O aplicație desktop pentru gestionarea și programarea actelor notariale, dezvoltată în Python cu PyQt5.
 
 ## Descriere
 Programator Acte Notariale este o aplicație pentru birouri notariale care permite gestionarea eficientă a programărilor și actelor notariale. Aplicația oferă o interfață intuitivă de tip calendar săptămânal, cu posibilitatea de a adăuga, edita și șterge programări pentru clienți.
@@ -69,16 +68,16 @@ python programator.py
 
 ### Navigare în calendar
 
-Folosiți butoanele ← și → pentru a naviga între săptămâni
-Apăsați butonul **Calendar** pentru a sări direct la o dată specifică
-Ziua curentă este evidențiată automat cu o culoare distinctivă
+- Folosiți butoanele ← și → pentru a naviga între săptămâni
+- Apăsați butonul **Calendar** pentru a sări direct la o dată specifică
+- Ziua curentă este evidențiată automat cu o culoare distinctivă
 
 ### Adăugare programare
 
-Apăsați butonul + de lângă ora dorită
-Completați detaliile clientului și tipul documentului
-Adăugați observații dacă este necesar
-Apăsați **Salvează**
+- Apăsați butonul + de lângă ora dorită
+- Completați detaliile clientului și tipul documentului
+- Adăugați observații dacă este necesar
+- Apăsați **Salvează**
 
 ### Editare programare
 
@@ -120,5 +119,5 @@ Contribuțiile sunt binevenite! Pentru a contribui la acest proiect:
 Acest proiect este freeware
 
 ## Autor și Contact
-Creat de Mihai Mereu
-Pentru întrebări sau sugestii, contactați: mihaimereu97@gmail.com
+- Creat de Mihai Mereu
+- Pentru întrebări sau sugestii, contactați: mihaimereu97@gmail.com
