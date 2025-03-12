@@ -50,17 +50,17 @@ Programator Acte Notariale este o aplicație pentru birouri notariale care permi
 
 ## Cerințe sistem
 
-Python 3.6 sau mai recent
-PyQt5
-SQLite
-Biblioteci Python: requests, BeautifulSoup4 (pentru cursul valutar)
+- Python 3.6 sau mai recent
+- PyQt5
+- SQLite
+- Biblioteci Python: requests, BeautifulSoup4 (pentru cursul valutar)
 
 ## Instalare
 
 ### Cerințe preliminare
 
-Python 3.6 sau mai recent
-PyQt5
+- Python 3.6 sau mai recent
+- PyQt5
 
 ### Pași de instalare
 ```bash
