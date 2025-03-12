@@ -248,6 +248,7 @@ class NotarialScheduler(QMainWindow):
             "Dezmembrare",
             "Donație",
             "Donație+Uzufruct",
+            "Divorț",
             "Ipotecă",
             "Împrumut",
             "Încetare contract de Întreținere",
@@ -416,14 +417,16 @@ class NotarialScheduler(QMainWindow):
         """Dialog pentru configurarea culorilor disponibile"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Configurare Culori")
-        dialog.setMinimumWidth(400)
-        dialog.setMinimumHeight(300)
+        dialog.setMinimumWidth(700)  # Lățime mărită
+        dialog.setMinimumHeight(500)  # Înălțime mărită
         
         layout = QVBoxLayout(dialog)
+        layout.setSpacing(20)  # Spațiere mărită
+        layout.setContentsMargins(20, 20, 20, 20)  # Margini mai mari
         
         # Titlu
         title_label = QLabel("Personalizare Culori")
-        title_label.setFont(QFont("Arial", 16, QFont.Bold))
+        title_label.setFont(QFont("Arial", 20, QFont.Bold))  # Font mărit
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
         
@@ -431,10 +434,14 @@ class NotarialScheduler(QMainWindow):
         description = QLabel("Configurați culorile pentru tipurile de documente (format HEX: #RRGGBB)")
         description.setAlignment(Qt.AlignCenter)
         description.setWordWrap(True)
+        description.setFont(QFont("Arial", 14))  # Font mărit
         layout.addWidget(description)
         
         # Form layout pentru câmpurile de culori
         form_layout = QFormLayout()
+        form_layout.setVerticalSpacing(20)  # Spațiere verticală mărită
+        form_layout.setHorizontalSpacing(15)  # Spațiere orizontală mărită
+        form_layout.setLabelAlignment(Qt.AlignRight)  # Aliniere etichete la dreapta
         layout.addLayout(form_layout)
         
         # Inițializăm dicționarul pentru noile culori
@@ -453,24 +460,29 @@ class NotarialScheduler(QMainWindow):
             
             # Layout orizontal pentru intrare și preview
             row_layout = QHBoxLayout()
+            row_layout.setSpacing(15)  # Spațiere mărită între elemente
             
             # Câmp text pentru cod culoare
             color_entry = QLineEdit(current_color)
-            color_entry.setMaximumWidth(100)
+            color_entry.setFont(QFont("Arial", 14))  # Font mărit
+            color_entry.setMinimumHeight(40)  # Înălțime mărită
+            color_entry.setMaximumWidth(150)  # Lățime maximă mărită
             color_entries[color_key] = color_entry
             row_layout.addWidget(color_entry)
             
             # Preview culoare
             color_preview = QFrame()
             color_preview.setFrameStyle(QFrame.Box)
-            color_preview.setFixedSize(30, 30)
-            color_preview.setStyleSheet(f"background-color: {current_color};")
+            color_preview.setFixedSize(50, 50)  # Dimensiune mărită
+            color_preview.setStyleSheet(f"background-color: {current_color}; border: 2px solid black;")  # Bordură adăugată
             color_previews[color_key] = color_preview
             row_layout.addWidget(color_preview)
             
             # Buton pentru a actualiza preview-ul
             update_btn = QPushButton("Verifică")
-            update_btn.setFixedWidth(80)
+            update_btn.setFont(QFont("Arial", 14))  # Font mărit
+            update_btn.setMinimumHeight(40)  # Înălțime mărită
+            update_btn.setFixedWidth(120)  # Lățime fixă mărită
             
             # Folosim o funcție closure pentru a păstra referința la key-ul curent
             def create_update_function(key):
@@ -481,11 +493,18 @@ class NotarialScheduler(QMainWindow):
             
             # Adăugăm și numele culorii
             name_entry = QLineEdit(color_name)
+            name_entry.setFont(QFont("Arial", 14))  # Font mărit
+            name_entry.setMinimumHeight(40)  # Înălțime mărită
             name_entry.setPlaceholderText("Nume culoare")
             row_layout.addWidget(name_entry, 1)  # 1 = stretch factor
             
+            # Etichetă pentru culoare
+            color_label = QLabel(f"Culoarea {i+1}:")
+            color_label.setFont(QFont("Arial", 14, QFont.Bold))  # Font mărit și îngroșat
+            color_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            
             # Adăugăm rândul complet în formular
-            form_layout.addRow(f"Culoarea {i+1}:", row_layout)
+            form_layout.addRow(color_label, row_layout)
         
         # Funcție pentru actualizarea preview-ului de culoare
         def update_color_preview(color_key):
@@ -494,7 +513,7 @@ class NotarialScheduler(QMainWindow):
             if hex_code.startswith("#") and (len(hex_code) == 7 or len(hex_code) == 9):
                 try:
                     # Actualizăm preview-ul
-                    color_previews[color_key].setStyleSheet(f"background-color: {hex_code};")
+                    color_previews[color_key].setStyleSheet(f"background-color: {hex_code}; border: 2px solid black;")
                     new_colors[color_key] = hex_code
                 except:
                     QMessageBox.warning(dialog, "Eroare", f"Codul de culoare {hex_code} nu este valid.")
@@ -503,9 +522,21 @@ class NotarialScheduler(QMainWindow):
         
         # Butoane OK/Cancel
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        
+        # Stilizare butoane
+        ok_button = button_box.button(QDialogButtonBox.Ok)
+        ok_button.setText("Salvează")
+        ok_button.setFont(QFont("Arial", 14))  # Font mărit
+        ok_button.setMinimumSize(180, 60)  # Buton mai mare
+        
+        cancel_button = button_box.button(QDialogButtonBox.Cancel)
+        cancel_button.setText("Anulează")
+        cancel_button.setFont(QFont("Arial", 14))  # Font mărit
+        cancel_button.setMinimumSize(180, 60)  # Buton mai mare
+        
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
+        layout.addWidget(button_box, alignment=Qt.AlignRight)
         
         # Executăm dialogul
         if dialog.exec_() == QDialog.Accepted:
@@ -1169,6 +1200,7 @@ class NotarialScheduler(QMainWindow):
                 super().__init__(text, parent)
                 self.text = text
                 self.setWordWrap(True)
+                self.setFont(QFont("Arial", 14))  # Font mărit
                 
             def mouseDoubleClickEvent(self, event):
                 self.startEditing()
@@ -1181,19 +1213,22 @@ class NotarialScheduler(QMainWindow):
                 # Creează dialog pentru editare
                 edit_dialog = QDialog(parent_dialog)
                 edit_dialog.setWindowTitle("Redenumire Tip Document")
-                edit_dialog.setMinimumWidth(400)
+                edit_dialog.setMinimumWidth(600)  # Lățime mărită
+                edit_dialog.setMinimumHeight(300)  # Înălțime minimă adăugată
                 
                 # Layout pentru dialog
                 layout = QVBoxLayout(edit_dialog)
+                layout.setSpacing(15)  # Spațiere mărită între elemente
                 
                 # Mesaj explicativ
                 info_label = QLabel("Redenumește tipul de document:")
-                info_label.setFont(QFont("Arial", 11))
+                info_label.setFont(QFont("Arial", 14))  # Font mărit
                 layout.addWidget(info_label)
                 
                 # Câmp text pentru noul nume
                 edit_field = QLineEdit(doc_type)
-                edit_field.setFont(QFont("Arial", 11))
+                edit_field.setFont(QFont("Arial", 14))  # Font mărit
+                edit_field.setMinimumHeight(40)  # Înălțime mărită
                 edit_field.selectAll()
                 layout.addWidget(edit_field)
                 
@@ -1201,11 +1236,24 @@ class NotarialScheduler(QMainWindow):
                 warning_label = QLabel("Atenție: Redenumirea va afecta toate programările existente. "
                                     "Asigurați-vă că actualizați și programările existente dacă este necesar.")
                 warning_label.setWordWrap(True)
+                warning_label.setFont(QFont("Arial", 12))  # Font mărit
                 warning_label.setStyleSheet("color: #FF5252;")
                 layout.addWidget(warning_label)
                 
                 # Butoane
                 button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+                
+                # Stilizare butoane
+                ok_button = button_box.button(QDialogButtonBox.Ok)
+                ok_button.setText("Salvează")
+                ok_button.setFont(QFont("Arial", 14))
+                ok_button.setMinimumSize(150, 50)  # Butoane mai mari
+                
+                cancel_button = button_box.button(QDialogButtonBox.Cancel)
+                cancel_button.setText("Anulează")
+                cancel_button.setFont(QFont("Arial", 14))
+                cancel_button.setMinimumSize(150, 50)  # Butoane mai mari
+                
                 layout.addWidget(button_box)
                 
                 button_box.accepted.connect(edit_dialog.accept)
@@ -1279,14 +1327,16 @@ class NotarialScheduler(QMainWindow):
         # Creăm un dialog mai complex pentru gestionarea tipurilor de documente
         dialog = QDialog(self)
         dialog.setWindowTitle("Gestionare Tipuri de Documente")
-        dialog.setMinimumWidth(900)  # Mărit pentru a acomoda două coloane
-        dialog.setMinimumHeight(600)
+        dialog.setMinimumWidth(1800)  # Lățime mărită semnificativ pentru 2K
+        dialog.setMinimumHeight(1200)  # Înălțime mărită semnificativ pentru 2K
         
         layout = QVBoxLayout(dialog)
+        layout.setSpacing(20)  # Spațiere mărită între elemente
+        layout.setContentsMargins(20, 20, 20, 20)  # Margini mai mari
         
         # Titlu
         title_label = QLabel("Tipuri de Documente Disponibile")
-        title_label.setFont(QFont("Arial", 16, QFont.Bold))
+        title_label.setFont(QFont("Arial", 20, QFont.Bold))  # Font mărit
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
         
@@ -1294,12 +1344,13 @@ class NotarialScheduler(QMainWindow):
         description = QLabel("Alegeți culoarea pentru fiecare tip de document din lista de mai jos.\n"
                              "Pentru a redenumi un tip de document, faceți dublu-click pe numele lui.")
         description.setAlignment(Qt.AlignCenter)
+        description.setFont(QFont("Arial", 14))  # Font mărit
         layout.addWidget(description)
         
         # Facem un scroll area pentru tabelul de tipuri de documente
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumHeight(400)
+        scroll_area.setMinimumHeight(500)  # Înălțime mărită
         layout.addWidget(scroll_area)
         
         # Widget-ul interior pentru scroll area
@@ -1308,6 +1359,9 @@ class NotarialScheduler(QMainWindow):
         
         # Folosim un grid layout pentru a dispune tipurile pe două coloane
         grid_layout = QGridLayout(scroll_content)
+        grid_layout.setVerticalSpacing(15)  # Spațiere verticală mărită
+        grid_layout.setHorizontalSpacing(20)  # Spațiere orizontală mărită
+        grid_layout.setContentsMargins(20, 20, 20, 20)  # Margini mai mari
         grid_layout.setColumnStretch(0, 1)  # Prima coloană pentru nume
         grid_layout.setColumnStretch(1, 0)  # A doua coloană pentru combobox
         grid_layout.setColumnStretch(2, 1)  # A treia coloană pentru nume (a doua serie)
@@ -1315,19 +1369,19 @@ class NotarialScheduler(QMainWindow):
         
         # Titluri pentru coloane
         col1_header = QLabel("Tip Document")
-        col1_header.setFont(QFont("Arial", 12, QFont.Bold))
+        col1_header.setFont(QFont("Arial", 16, QFont.Bold))  # Font mărit
         grid_layout.addWidget(col1_header, 0, 0)
         
         col1_highlight = QLabel("Culoare")
-        col1_highlight.setFont(QFont("Arial", 12, QFont.Bold))
+        col1_highlight.setFont(QFont("Arial", 16, QFont.Bold))  # Font mărit
         grid_layout.addWidget(col1_highlight, 0, 1)
         
         col2_header = QLabel("Tip Document")
-        col2_header.setFont(QFont("Arial", 12, QFont.Bold))
+        col2_header.setFont(QFont("Arial", 16, QFont.Bold))  # Font mărit
         grid_layout.addWidget(col2_header, 0, 2)
         
         col2_highlight = QLabel("Culoare")
-        col2_highlight.setFont(QFont("Arial", 12, QFont.Bold))
+        col2_highlight.setFont(QFont("Arial", 16, QFont.Bold))  # Font mărit
         grid_layout.addWidget(col2_highlight, 0, 3)
         
         # Calculăm numărul de rânduri pentru fiecare coloană
@@ -1357,11 +1411,13 @@ class NotarialScheduler(QMainWindow):
             
             # Nume tip document - folosim EditableLabel pentru a permite redenumirea
             name_label = EditableLabel(doc_type, dialog)
-            name_label.setFont(QFont("Arial", 11))
+            name_label.setMinimumHeight(40)  # Înălțime mărită
             grid_layout.addWidget(name_label, row, col_offset)
             
             # Combobox pentru culoare
             combobox = QComboBox()
+            combobox.setFont(QFont("Arial", 14))  # Font mărit
+            combobox.setMinimumHeight(40)  # Înălțime mărită
             combobox.addItems(color_options)
             
             # Setăm selectia curentă
@@ -1376,7 +1432,7 @@ class NotarialScheduler(QMainWindow):
                 
                 # Aplicăm culoarea de fundal pentru nume
                 if current_color in self.colors:
-                    name_label.setStyleSheet(f"background-color: {self.colors[current_color]}; padding: 5px;")
+                    name_label.setStyleSheet(f"background-color: {self.colors[current_color]}; padding: 10px; border-radius: 5px;")  # Padding mărit
             
             grid_layout.addWidget(combobox, row, col_offset + 1)
             comboboxes[doc_type] = combobox
@@ -1385,36 +1441,43 @@ class NotarialScheduler(QMainWindow):
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
+        separator.setLineWidth(2)  # Linie mai groasă
         layout.addWidget(separator)
         
         # Formular pentru adăugarea unui nou tip de document
         add_form_layout = QHBoxLayout()
+        add_form_layout.setSpacing(15)  # Spațiere mărită
         layout.addLayout(add_form_layout)
         
         add_label = QLabel("Adaugă Tip Document Nou:")
-        add_label.setFont(QFont("Arial", 11))
+        add_label.setFont(QFont("Arial", 16))  # Font mărit
         add_form_layout.addWidget(add_label)
         
         new_doc_type_entry = QLineEdit()
-        new_doc_type_entry.setFont(QFont("Arial", 11))
+        new_doc_type_entry.setFont(QFont("Arial", 14))  # Font mărit
+        new_doc_type_entry.setMinimumHeight(50)  # Înălțime mărită
         add_form_layout.addWidget(new_doc_type_entry, 1)  # 1 = stretch factor
         
         new_color_combo = QComboBox()
+        new_color_combo.setFont(QFont("Arial", 14))  # Font mărit
+        new_color_combo.setMinimumHeight(50)  # Înălțime mărită
         new_color_combo.addItems(color_options)
         add_form_layout.addWidget(new_color_combo)
         
         add_button = QPushButton("Adaugă")
-        add_button.setFont(QFont("Arial", 11))
+        add_button.setFont(QFont("Arial", 14, QFont.Bold))  # Font mărit și îngroșat
+        add_button.setMinimumSize(150, 50)  # Buton mai mare
         add_form_layout.addWidget(add_button)
         
         # Butoane dialog
         bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(20)  # Spațiere mărită
         layout.addLayout(bottom_layout)
         
         # Buton pentru configurarea culorilor
         colors_button = QPushButton("Configurare Culori")
-        colors_button.setFont(QFont("Arial", 12))
-        colors_button.setMinimumSize(150, 40)
+        colors_button.setFont(QFont("Arial", 14))  # Font mărit
+        colors_button.setMinimumSize(200, 60)  # Buton mai mare
         colors_button.clicked.connect(self.show_color_settings_dialog)
         bottom_layout.addWidget(colors_button)
         
@@ -1425,11 +1488,13 @@ class NotarialScheduler(QMainWindow):
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         ok_button = button_box.button(QDialogButtonBox.Ok)
         ok_button.setText("Salvează")
-        ok_button.setFont(QFont("Arial", 12))
+        ok_button.setFont(QFont("Arial", 14))  # Font mărit
+        ok_button.setMinimumSize(180, 60)  # Buton mai mare
         
         cancel_button = button_box.button(QDialogButtonBox.Cancel)
         cancel_button.setText("Anulează")
-        cancel_button.setFont(QFont("Arial", 12))
+        cancel_button.setFont(QFont("Arial", 14))  # Font mărit
+        cancel_button.setMinimumSize(180, 60)  # Buton mai mare
         
         bottom_layout.addWidget(button_box)
         

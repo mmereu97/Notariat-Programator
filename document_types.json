@@ -7,6 +7,7 @@
         "Consultație",
         "Dezmembrare",
         "Dezmembrare + vânzare",
+        "Divorț",
         "Donație",
         "Donație+Uzufruct",
         "Ipotecă",
@@ -52,7 +53,8 @@
         "Vânzare +Uzufruct viager": "color2",
         "Vânzare Drepturi Succesorale": "color1",
         "Vânzare": "color2",
-        "Dezmembrare + vânzare": "color2"
+        "Dezmembrare + vânzare": "color2",
+        "Divorț": "color1"
     },
     "colors": {
         "color1": "#81C784",
@@ -61,10 +63,10 @@
         "color4": "#4DB6AC"
     },
     "color_names": {
-        "color1": "Verde",
-        "color2": "Galben",
-        "color3": "Portocaliu",
-        "color4": "Verde Tatiana"
+        "color1": "Eva",
+        "color2": "Mihai",
+        "color3": "Oana",
+        "color4": "Tatiana"
     },
     "last_selection": "Succesiune"
 }
