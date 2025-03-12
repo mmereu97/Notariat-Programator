@@ -1572,9 +1572,28 @@ class NotarialScheduler(QMainWindow):
         # Inițializăm label-ul cu ultima acțiune
         self.update_last_action_label()
 
+    def log_intervention(self, action_text):
+        """Scrie o intervenție în fișierul de log, păstrând un istoric complet"""
+        try:
+            # Creăm un nume de fișier bazat pe data curentă (un fișier per lună)
+            current_date = datetime.datetime.now()
+            log_filename = f"interventii_{current_date.year}_{current_date.month:02d}.log"
+            
+            # Adăugăm timestamp actual pentru însemnarea în log
+            timestamp = current_date.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Scriem în fișierul de log (mod append)
+            with open(log_filename, "a", encoding="utf-8") as log_file:
+                # Adăugăm timestamp și textul intervenției
+                log_file.write(f"[{timestamp}] {action_text}\n")
+                
+            print(f"Intervenție înregistrată în log: {log_filename}")
+        except Exception as e:
+            print(f"Eroare la scrierea în fișierul de log: {e}")
+
     # 2. Adăugăm o metodă nouă pentru a obține ultima intervenție
     def update_last_action_label(self):
-        """Actualizează label-ul cu informații despre ultima intervenție"""
+        """Actualizează label-ul cu informații despre ultima intervenție și scrie în log"""
         try:
             # Obținem cea mai recentă modificare din baza de date (creată, modificată sau ștearsă)
             self.cursor.execute('''
@@ -1646,6 +1665,9 @@ class NotarialScheduler(QMainWindow):
                     action_text = action_text[:max_length-3] + "..."
                 
                 self.last_action_label.setText(action_text)
+                
+                # Adăugăm înregistrarea în log (NOUĂ)
+                self.log_intervention(action_text)
             else:
                 self.last_action_label.setText("Ultima intervenție: -")
                 

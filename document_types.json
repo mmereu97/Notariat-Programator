@@ -6,13 +6,11 @@
         "Comodat",
         "Consultație",
         "Dezmembrare",
+        "Dezmembrare + vânzare",
         "Donație",
         "Donație+Uzufruct",
         "Ipotecă",
-        "Împrumut",
-        "Încetare contract de Întreținere",
-        "Închiriere",
-        "Întreținere",
+        "Liber",
         "Novație",
         "Partaj voluntar",
         "Renunțare drept de Uzufruct",
@@ -20,12 +18,14 @@
         "Succesiune",
         "Superficie",
         "Supliment",
+        "Testament",
+        "Vânzare",
         "Vânzare +Uzufruct viager",
         "Vânzare Drepturi Succesorale",
-        "Vânzare",
-        "Liber",
-        "Testament",
-        "Dezmembrare + vânzare"
+        "Împrumut",
+        "Încetare contract de Întreținere",
+        "Închiriere",
+        "Întreținere"
     ],
     "document_colors": {
         "Succesiune": "color1",
@@ -64,7 +64,7 @@
         "color1": "Verde",
         "color2": "Galben",
         "color3": "Portocaliu",
-        "color4": "Verde Deschis"
+        "color4": "Verde Tatiana"
     },
-    "last_selection": "Dezmembrare + vânzare"
+    "last_selection": "Succesiune"
 }
