@@ -82,7 +82,7 @@ python programator.py
 ### Navigare în calendar
 
 Folosiți butoanele ← și → pentru a naviga între săptămâni
-Apăsați butonul Calendar pentru a sări direct la o dată specifică
+Apăsați butonul **Calendar** pentru a sări direct la o dată specifică
 Ziua curentă este evidențiată automat cu o culoare distinctivă
 
 ### Adăugare programare
@@ -90,27 +90,27 @@ Ziua curentă este evidențiată automat cu o culoare distinctivă
 Apăsați butonul + de lângă ora dorită
 Completați detaliile clientului și tipul documentului
 Adăugați observații dacă este necesar
-Apăsați Salvează
+Apăsați **Salvează**
 
 ### Editare programare
 
-Apăsați butonul Edit de lângă programarea existentă
-Modificați detaliile necesare
-Apăsați Salvează pentru a confirma modificările sau Șterge programare pentru a elimina programarea
+- Apăsați butonul **Edit** de lângă programarea existentă
+- Modificați detaliile necesare
+- Apăsați **Salvează** pentru a confirma modificările sau **Șterge programare** pentru a elimina programarea
 
 ### Gestionare tipuri de documente
 
-Apăsați butonul Adaugă tip document
-Selectați culoarea dorită pentru fiecare tip de document din lista de opțiuni
-Pentru redenumire, faceți dublu-click pe numele tipului de document
-Pentru a adăuga un nou tip, completați câmpul și apăsați Adaugă
-Folosiți butonul Configurare Culori pentru a personaliza paleta de culori disponibile
-Apăsați Salvează pentru a confirma modificările
+- Apăsați butonul **Adaugă tip document**
+- Selectați culoarea dorită pentru fiecare tip de document din lista de opțiuni
+- Pentru redenumire, faceți dublu-click pe numele tipului de document
+- Pentru a adăuga un nou tip, completați câmpul și apăsați **Adaugă**
+- Folosiți butonul **Configurare Culori** pentru a personaliza paleta de culori disponibile
+- Apăsați **Salvează** pentru a confirma modificările
 
 ### Utilizare în rețea
 
-Aplicația detectează automat dacă este deschisă pe altă stație din rețea
-În caz de blocare accidentală, folosiți opțiunea Forțează deschidere
+- Aplicația detectează automat dacă este deschisă pe altă stație din rețea
+- În caz de blocare accidentală, folosiți opțiunea **Forțează deschidere**
 
 ## Structura bazei de date
 Aplicația folosește SQLite pentru stocarea datelor în fișierul notarial_scheduler.db. Structura include:
@@ -121,12 +121,12 @@ Aplicația folosește SQLite pentru stocarea datelor în fișierul notarial_sche
 ## Contribuție
 Contribuțiile sunt binevenite! Pentru a contribui la acest proiect:
 
--Fork-ați repository-ul
--Creați un branch nou: `git checkout -b feature/functionalitate-noua`
--Faceți modificările dorite
--Commit-ați modificările: `git commit -m 'Adăugare funcționalitate nouă'`
--Push la branch: `git push origin feature/functionalitate-noua`
--Creați un Pull Request
+- Fork-ați repository-ul
+- Creați un branch nou: `git checkout -b feature/functionalitate-noua`
+- Faceți modificările dorite
+- Commit-ați modificările: `git commit -m 'Adăugare funcționalitate nouă'`
+- Push la branch: `git push origin feature/functionalitate-noua`
+- Creați un Pull Request
 
 ## Licență
 Acest proiect este freeware
