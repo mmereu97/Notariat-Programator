@@ -39,8 +39,29 @@ Programator Acte Notariale este o aplicație pentru birouri notariale care permi
 - **Detecție blocaje vechi:** Auto-detectare și eliminare a blocajelor mai vechi de 4 ore
 - **Opțiune de forțare:** Posibilitate de a forța deschiderea în cazuri excepționale
 
-## Tehnologii utilizate
 
+## Sistem de Logging pentru Intervenții
+Aplicația include un sistem automat de înregistrare a tuturor intervențiilor (crearea, modificarea și ștergerea programărilor), oferind un istoric complet al activității.
+
+### Caracteristici principale:
+- **Organizare lunară:** Fișierele de log sunt generate automat pentru fiecare lună (interventii_YYYY_MM.log)
+- **Înregistrare detaliată:** Fiecare acțiune este salvată cu timestamp exact și toate detaliile relevante
+- **Format standardizat:** Înregistrările urmează formatul:
+```bash
+[YYYY-MM-DD HH:MM:SS] Ultima intervenție: programare [tip_acțiune] de către [utilizator], [data și ora]. ([tip_act], [nume_client], [data_programare])
+```
+- **Funcționare automată:** Toate intervențiile sunt înregistrate automat, fără a necesita acțiuni suplimentare din partea utilizatorului
+
+### Utilitate:
+- Oferă trasabilitate completă a tuturor modificărilor făcute în sistem
+- Permite identificarea rapidă a autorului fiecărei modificări
+- Facilitează auditarea activității și rezolvarea potențialelor dispute
+- Permite recuperarea informațiilor despre programări în caz de necesitate
+
+### Locația fișierelor:
+Fișierele de log sunt salvate în același director cu aplicația și pot fi deschise cu orice editor de text standard pentru consultare.
+
+## Tehnologii utilizate
 - **Python 3.x:** Limbajul de programare principal
 - **PyQt5:** Framework pentru interfața grafică
 - **SQLite:** Bază de date pentru stocarea programărilor
