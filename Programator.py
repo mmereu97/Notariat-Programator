@@ -1,3 +1,6 @@
+import requests
+from bs4 import BeautifulSoup
+import re
 import json
 import os
 import sys
@@ -13,7 +16,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QFrame, QScrollArea, QComboBox, QLineEdit, 
                             QDialog, QDialogButtonBox, QMessageBox, QFormLayout,
                             QCalendarWidget, QCheckBox, QTextEdit, QToolTip)
-from PyQt5.QtCore import Qt, QSize, QDate
+from PyQt5.QtCore import Qt, QSize, QDate, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 
 class AddEditAppointmentDialog(QDialog):
@@ -167,7 +170,6 @@ class AddEditAppointmentDialog(QDialog):
         self.parent().last_doc_type_selection = document_type
         self.parent().save_document_types_to_json()
 
-
 class AddDocumentTypeDialog(QDialog):
     """Dialog pentru adăugarea unui nou tip de document"""
     def __init__(self, parent=None):
@@ -203,7 +205,6 @@ class AddDocumentTypeDialog(QDialog):
     def get_value(self):
         """Returnează numele tipului de document introdus"""
         return self.doc_type_entry.text()
-
 
 class NotarialScheduler(QMainWindow):
     def __init__(self):
@@ -536,13 +537,17 @@ class NotarialScheduler(QMainWindow):
         header_layout = QHBoxLayout()
         parent_layout.addLayout(header_layout)
         
-        # Buton săptămâna anterioară
+        # Buton săptămâna anterioară (acum primul element)
         prev_btn = QPushButton("←")
         prev_btn.setFixedWidth(80)
         prev_btn.setFixedHeight(50)
         prev_btn.setFont(QFont("Arial", 16))
         prev_btn.clicked.connect(self.prev_week)
         header_layout.addWidget(prev_btn)
+        
+        # Widget curs valutar (acum al doilea element)
+        currency_widget = CurrencyWidget(self)
+        header_layout.addWidget(currency_widget)
         
         # Etichetă săptămână curentă
         self.week_label = QLabel()
@@ -2011,6 +2016,393 @@ class EditableLabel(QLabel):
                         "Eroare",
                         f"Nu s-a putut redenumi tipul de document: {e}"
                     )
+
+class CurrencyFetcher(QThread):
+    """Thread separat pentru preluarea cursului valutar"""
+    currency_fetched = pyqtSignal(dict)
+    
+    def run(self):
+        try:
+            print("\n--- Încercare preluare curs valutar ---")
+            # Preluăm cursul de pe site-ul BNR
+            currency_data = self.fetch_bnr_exchange_rate()
+            print(f"Date curs obținute: {currency_data}")
+            self.currency_fetched.emit(currency_data)
+        except Exception as e:
+            print(f"Eroare critică la obținerea cursului valutar: {e}")
+            # Emitem un dict gol în caz de eroare
+            self.currency_fetched.emit({})
+    
+    def fetch_bnr_exchange_rate(self):
+        """Preia cursul Euro-Leu de pe site-ul BNR"""
+        try:
+            # Încercăm mai întâi cu BNR
+            print("Încercare preluare de pe BNR...")
+            result = self.fetch_from_bnr()
+            if result and 'rate' in result:
+                print(f"Curs obținut cu succes de pe BNR: {result}")
+                return result
+                
+            # Dacă nu merge BNR, încercăm cu cursbnr.ro
+            print("BNR nu a funcționat, încercare pe cursbnr.ro...")
+            result = self.fetch_from_cursbnr()
+            if result and 'rate' in result:
+                print(f"Curs obținut cu succes de pe cursbnr.ro: {result}")
+                return result
+            
+            # Dacă nu merge nici cursbnr.ro, încercăm cu curs-valutar-bnr.ro
+            print("cursbnr.ro nu a funcționat, încercare pe curs-valutar-bnr.ro...")
+            result = self.fetch_from_curs_valutar_bnr()
+            if result and 'rate' in result:
+                print(f"Curs obținut cu succes de pe curs-valutar-bnr.ro: {result}")
+                return result
+            
+            print("Nu s-a putut obține cursul de pe niciuna din sursele încercate.")
+            return {}
+            
+        except Exception as e:
+            print(f"Eroare generală la preluarea cursului: {e}")
+            return {}
+            
+    def fetch_from_bnr(self):
+        """Preluare de pe site-ul BNR oficial"""
+        try:
+            url = "https://www.bnr.ro/Cursul-de-schimb--7372.aspx"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            print(f"GET request la {url}")
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"Status code: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"Eroare HTTP: {response.status_code}")
+                return {}
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Căutăm Euro în tabelul de cursuri
+            euro_rate = None
+            variation = None
+            
+            # Căutăm tabelul cu cursurile
+            tables = soup.find_all('table')
+            print(f"Am găsit {len(tables)} tabele în pagină")
+            
+            for i, table in enumerate(tables):
+                print(f"Analizez tabelul {i+1}")
+                rows = table.find_all('tr')
+                print(f"  - {len(rows)} rânduri găsite")
+                
+                for row in rows:
+                    cells = row.find_all('td')
+                    if len(cells) >= 3:
+                        currency = cells[0].get_text().strip()
+                        print(f"  - Analizez rând cu moneda: {currency}")
+                        
+                        if "EUR" in currency:
+                            rate_text = cells[2].get_text().strip()
+                            print(f"  - Text rată EUR: {rate_text}")
+                            
+                            # Extragem valoarea numerică
+                            rate_match = re.search(r'(\d+[.,]\d+)', rate_text)
+                            if rate_match:
+                                euro_rate = rate_match.group(1).replace(',', '.')
+                                print(f"  - Valoare extrasă: {euro_rate}")
+                            
+                            # Încercăm să găsim variația
+                            if len(cells) >= 4:
+                                var_text = cells[3].get_text().strip()
+                                print(f"  - Text variație: {var_text}")
+                                
+                                var_match = re.search(r'([+-]?\d+[.,]\d+)', var_text)
+                                if var_match:
+                                    variation = var_match.group(1).replace(',', '.')
+                                    print(f"  - Variație extrasă: {variation}")
+                            
+                            break
+                
+                if euro_rate:
+                    break
+            
+            # Dacă nu am găsit în format tabel, încercăm să căutăm în alt format
+            if not euro_rate:
+                print("Nu am găsit în tabele, caut în tot documentul...")
+                euro_elements = soup.find_all(string=re.compile('EUR'))
+                print(f"Am găsit {len(euro_elements)} elemente cu 'EUR'")
+                
+                for elem in euro_elements:
+                    parent = elem.parent
+                    if parent:
+                        rate_text = parent.get_text()
+                        print(f"Text element EUR: {rate_text}")
+                        
+                        rate_match = re.search(r'EUR.*?(\d+[.,]\d+)', rate_text)
+                        if rate_match:
+                            euro_rate = rate_match.group(1).replace(',', '.')
+                            print(f"Valoare extrasă: {euro_rate}")
+                            break
+            
+            # Construim rezultatul
+            result = {}
+            if euro_rate:
+                result['rate'] = float(euro_rate)
+                if variation:
+                    result['variation'] = float(variation)
+                    result['direction'] = 'up' if float(variation) > 0 else 'down' if float(variation) < 0 else 'same'
+                else:
+                    result['variation'] = 0.0
+                    result['direction'] = 'same'
+                    
+            return result
+            
+        except Exception as e:
+            print(f"Eroare specifică BNR: {e}")
+            return {}
+    
+    def fetch_from_cursbnr(self):
+        """Preluare de pe cursbnr.ro"""
+        try:
+            url = "https://www.cursbnr.ro/"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            print(f"GET request la {url}")
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"Status code: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"Eroare HTTP: {response.status_code}")
+                return {}
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Căutăm elementul cu EURO
+            euro_elements = soup.find_all(string=re.compile('EURO', re.IGNORECASE))
+            print(f"Am găsit {len(euro_elements)} elemente cu 'EURO'")
+            
+            for elem in euro_elements:
+                parent = elem.parent
+                if not parent:
+                    continue
+                    
+                # Urcăm în ierarhie pentru a găsi blocul cu rata
+                container = parent
+                for _ in range(3):  # Urcăm maxim 3 niveluri
+                    if container:
+                        container = container.parent
+                
+                if not container:
+                    continue
+                    
+                container_text = container.get_text()
+                print(f"Text container: {container_text}")
+                
+                # Căutăm valoarea Euro
+                rate_match = re.search(r'(\d+[.,]\d+)\s*(?:RON|lei)', container_text, re.IGNORECASE)
+                if rate_match:
+                    euro_rate = rate_match.group(1).replace(',', '.')
+                    print(f"Valoare extrasă: {euro_rate}")
+                    
+                    # Căutăm variația
+                    variation_match = re.search(r'([+-]?\d+[.,]\d+)%', container_text)
+                    variation = 0.0
+                    direction = 'same'
+                    
+                    if variation_match:
+                        var_percent = float(variation_match.group(1).replace(',', '.'))
+                        print(f"Variație procent: {var_percent}%")
+                        
+                        # Aproximăm variația în lei pe baza procentului
+                        rate_float = float(euro_rate)
+                        variation = (var_percent * rate_float) / 100
+                        direction = 'up' if var_percent > 0 else 'down' if var_percent < 0 else 'same'
+                    
+                    return {
+                        'rate': float(euro_rate),
+                        'variation': variation,
+                        'direction': direction
+                    }
+            
+            return {}
+            
+        except Exception as e:
+            print(f"Eroare cursbnr.ro: {e}")
+            return {}
+    
+    def fetch_from_curs_valutar_bnr(self):
+        """Preluare de pe curs-valutar-bnr.ro"""
+        try:
+            url = "https://www.curs-valutar-bnr.ro/"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            print(f"GET request la {url}")
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"Status code: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"Eroare HTTP: {response.status_code}")
+                return {}
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Căutăm elementul cu Euro
+            euro_elements = soup.find_all(string=re.compile('EUR|Euro', re.IGNORECASE))
+            print(f"Am găsit {len(euro_elements)} elemente cu 'EUR/Euro'")
+            
+            for elem in euro_elements:
+                row = elem.parent
+                if not row:
+                    continue
+                    
+                # Urcăm în ierarhie pentru a găsi rândul complet
+                while row and row.name != 'tr':
+                    row = row.parent
+                
+                if not row:
+                    continue
+                
+                cells = row.find_all('td')
+                if len(cells) < 3:
+                    continue
+                    
+                row_text = row.get_text()
+                print(f"Text rând: {row_text}")
+                
+                # Căutăm valoarea Euro în celule
+                value_cell = cells[2] if len(cells) > 2 else None
+                if value_cell:
+                    value_text = value_cell.get_text().strip()
+                    print(f"Text valoare: {value_text}")
+                    
+                    rate_match = re.search(r'(\d+[.,]\d+)', value_text)
+                    if rate_match:
+                        euro_rate = rate_match.group(1).replace(',', '.')
+                        print(f"Valoare extrasă: {euro_rate}")
+                        
+                        # Încercăm să găsim variația
+                        variation_cell = cells[3] if len(cells) > 3 else None
+                        variation = 0.0
+                        direction = 'same'
+                        
+                        if variation_cell:
+                            var_text = variation_cell.get_text().strip()
+                            print(f"Text variație: {var_text}")
+                            
+                            var_match = re.search(r'([+-]?\d+[.,]\d+)', var_text)
+                            if var_match:
+                                variation = float(var_match.group(1).replace(',', '.'))
+                                direction = 'up' if variation > 0 else 'down' if variation < 0 else 'same'
+                        
+                        return {
+                            'rate': float(euro_rate),
+                            'variation': variation,
+                            'direction': direction
+                        }
+            
+            return {}
+            
+        except Exception as e:
+            print(f"Eroare curs-valutar-bnr.ro: {e}")
+            return {}
+
+class CurrencyWidget(QFrame):
+    """Widget pentru afișarea cursului valutar"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        # Configurare widget
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setLineWidth(1)
+        self.setFixedHeight(60)
+        self.setMinimumWidth(200)
+        self.setAutoFillBackground(True)
+        
+        # Fundal alb
+        palette = QPalette()
+        palette.setColor(QPalette.Background, QColor("#FFFFFF"))
+        self.setPalette(palette)
+        
+        # Layout pentru widget
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+        
+        # Săgeată pentru direcție - ACUM PRIMA
+        self.arrow_label = QLabel()
+        self.arrow_label.setFixedSize(30, 30)
+        self.arrow_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.arrow_label)
+        
+        # Layout pentru informații curs - ACUM A DOUA
+        info_layout = QVBoxLayout()
+        layout.addLayout(info_layout)
+        
+        # Valoarea cursului
+        self.rate_label = QLabel("1 EURO = ... Lei")
+        self.rate_label.setFont(QFont("Arial", 12, QFont.Bold))
+        info_layout.addWidget(self.rate_label)
+        
+        # Variația cursului
+        self.variation_label = QLabel("Se încarcă...")
+        self.variation_label.setFont(QFont("Arial", 10))
+        info_layout.addWidget(self.variation_label)
+        
+        # Starea inițială - "Loading..."
+        self.update_display(None)
+        
+        # Thread pentru preluarea cursului
+        self.currency_thread = None
+        
+        # Timer pentru actualizare periodică
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self.fetch_currency)
+        
+        # Preluăm cursul imediat și apoi o dată pe oră
+        self.fetch_currency()
+        self.update_timer.start(60 * 60 * 1000)  # Actualizare la fiecare oră
+    
+    def fetch_currency(self):
+        """Pornește thread-ul pentru preluarea cursului valutar"""
+        if self.currency_thread is None or not self.currency_thread.isRunning():
+            self.currency_thread = CurrencyFetcher()
+            self.currency_thread.currency_fetched.connect(self.on_currency_fetched)
+            self.currency_thread.start()
+    
+    def on_currency_fetched(self, data):
+        """Primește datele despre curs și actualizează afișarea"""
+        self.update_display(data)
+    
+    def update_display(self, data):
+        """Actualizează afișarea cu datele primite"""
+        if not data:
+            # Afișare "Loading..." sau valoare implicită
+            self.rate_label.setText("1 EURO = ... Lei")
+            self.variation_label.setText("Se încarcă...")
+            self.variation_label.setStyleSheet("color: gray;")
+            self.arrow_label.setText("")
+            return
+        
+        # Actualizare valoare curs
+        rate = data.get('rate', 0.0)
+        self.rate_label.setText(f"1 EURO = {rate:.4f} Lei")
+        
+        # Actualizare variație
+        variation = data.get('variation', 0.0)
+        direction = data.get('direction', 'same')
+        
+        if direction == 'up':
+            self.variation_label.setText(f"+{variation:.4f} Lei")
+            self.variation_label.setStyleSheet("color: green;")
+            self.arrow_label.setText("▲")
+            self.arrow_label.setStyleSheet("color: green; font-size: 18px;")
+        elif direction == 'down':
+            self.variation_label.setText(f"{variation:.4f} Lei")
+            self.variation_label.setStyleSheet("color: red;")
+            self.arrow_label.setText("▼")
+            self.arrow_label.setStyleSheet("color: red; font-size: 18px;")
+        else:
+            self.variation_label.setText("0.0000 Lei")
+            self.variation_label.setStyleSheet("color: gray;")
+            self.arrow_label.setText("●")
+            self.arrow_label.setStyleSheet("color: gray; font-size: 18px;")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
