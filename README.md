@@ -57,11 +57,6 @@ Programator Acte Notariale este o aplicație pentru birouri notariale care permi
 
 ## Instalare
 
-### Cerințe preliminare
-
-- Python 3.6 sau mai recent
-- PyQt5
-
 ### Pași de instalare
 ```bash
 # Clonați repository-ul:
