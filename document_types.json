@@ -24,7 +24,8 @@
         "Vânzare Drepturi Succesorale",
         "Vânzare",
         "Liber",
-        "Testament"
+        "Testament",
+        "Dezmembrare + vânzare"
     ],
     "document_colors": {
         "Succesiune": "color1",
@@ -50,7 +51,8 @@
         "Superficie": "color2",
         "Vânzare +Uzufruct viager": "color2",
         "Vânzare Drepturi Succesorale": "color1",
-        "Vânzare": "color2"
+        "Vânzare": "color2",
+        "Dezmembrare + vânzare": "color2"
     },
     "colors": {
         "color1": "#81C784",
@@ -64,5 +66,5 @@
         "color3": "Portocaliu",
         "color4": "Verde Deschis"
     },
-    "last_selection": "Liber"
+    "last_selection": "Dezmembrare + vânzare"
 }

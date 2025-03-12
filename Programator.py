@@ -283,6 +283,7 @@ class NotarialScheduler(QMainWindow):
         self.create_header(main_layout)
         self.create_calendar(main_layout)
         self.create_footer(main_layout)
+        self.update_last_action_label()
     
     def init_database(self):
         """Inițializare bază de date SQLite și încărcare tipuri de documente din JSON"""
@@ -1029,6 +1030,7 @@ class NotarialScheduler(QMainWindow):
             # Închidem dialogul și actualizăm afișarea
             dialog.reject()  # Folosim reject() pentru a închide dialogul
             self.refresh_calendar()
+            self.update_last_action_label()  # Actualizăm label-ul
 
     def save_appointment(self, day, time, client_name, doc_type, observations=""):
         """Salvare programare nouă în baza de date"""
@@ -1048,7 +1050,9 @@ class NotarialScheduler(QMainWindow):
         self.conn.commit()
         
         self.refresh_calendar()
-    
+        self.update_last_action_label()  # Actualizăm label-ul
+
+    # 3.2 Modificare pentru update_appointment
     def update_appointment(self, appointment_id, client_name, doc_type, time, observations=""):
         """Actualizare programare existentă în baza de date"""
         if not client_name or not doc_type or not time:
@@ -1075,7 +1079,8 @@ class NotarialScheduler(QMainWindow):
         self.conn.commit()
         
         self.refresh_calendar()
-    
+        self.update_last_action_label()  # Actualizăm label-ul    
+
     def validate_time_format(self, time_str):
         """Validează formatul orei (HH:MM)"""
         try:
@@ -1141,6 +1146,7 @@ class NotarialScheduler(QMainWindow):
             )
             self.conn.commit()
             self.refresh_calendar()
+            self.update_last_action_label()  # Actualizăm label-ul
             
     def restore_appointment(self, appointment_id):
         """Restaurează o programare ștearsă"""
@@ -1150,6 +1156,7 @@ class NotarialScheduler(QMainWindow):
         )
         self.conn.commit()
         self.refresh_calendar()
+        self.update_last_action_label()  # Actualizăm label-ul
     
     def add_document_type(self):
         """Adăugare sau gestionare tip document cu layout pe două coloane și salvare în JSON"""
@@ -1536,25 +1543,115 @@ class NotarialScheduler(QMainWindow):
             self.create_day_column(i, day_date)
     
     def create_footer(self, parent_layout):
-        """Creare subsol cu informații despre autor"""
+        """Creare subsol cu informații despre autor și ultima intervenție"""
         footer_frame = QFrame()
         footer_frame.setFrameStyle(QFrame.StyledPanel)
         footer_frame.setLineWidth(1)
-        footer_frame.setFixedHeight(40)
+        footer_frame.setFixedHeight(40)  # Revenim la înălțimea inițială
         parent_layout.addWidget(footer_frame)
         
         footer_layout = QHBoxLayout(footer_frame)
         footer_layout.setContentsMargins(10, 5, 10, 5)
         
-        # Spațiu gol în stânga
-        spacer = QWidget()
-        footer_layout.addWidget(spacer, 1)  # 1 = stretch factor
+        # Label pentru ultima intervenție
+        self.last_action_label = QLabel("Ultima intervenție: -")
+        self.last_action_label.setFont(QFont("Arial", 10, QFont.Bold))
+        self.last_action_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        # Modificăm layout-ul pentru a oferi mai mult spațiu orizontal
+        footer_layout.addWidget(self.last_action_label, 3)  # Creștem stretch factor-ul de la 1 la 3
+        footer_layout.addWidget(self.last_action_label, 1)  # 1 = stretch factor
         
         # Numele autorului în dreapta
         author_label = QLabel("Mihai Mereu")
         author_label.setFont(QFont("Arial", 10, QFont.Bold))
         author_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        author_label.setFixedWidth(150)  # Fixăm lățimea numelui pentru a permite mai mult spațiu pentru label-ul de intervenție
         footer_layout.addWidget(author_label)
+        
+        # Inițializăm label-ul cu ultima acțiune
+        self.update_last_action_label()
+
+    # 2. Adăugăm o metodă nouă pentru a obține ultima intervenție
+    def update_last_action_label(self):
+        """Actualizează label-ul cu informații despre ultima intervenție"""
+        try:
+            # Obținem cea mai recentă modificare din baza de date (creată, modificată sau ștearsă)
+            self.cursor.execute('''
+                SELECT 
+                    CASE
+                        WHEN modified_at IS NOT NULL AND deleted_at IS NULL THEN 'modificată'
+                        WHEN deleted_at IS NOT NULL THEN 'ștearsă'
+                        ELSE 'creată'
+                    END as action_type,
+                    CASE
+                        WHEN modified_at IS NOT NULL AND deleted_at IS NULL THEN modified_at
+                        WHEN deleted_at IS NOT NULL THEN deleted_at
+                        ELSE created_at
+                    END as action_time,
+                    day, 
+                    time, 
+                    document_type, 
+                    client_name,
+                    CASE
+                        WHEN modified_at IS NOT NULL AND deleted_at IS NULL THEN modified_by
+                        WHEN deleted_at IS NOT NULL THEN deleted_by
+                        ELSE computer_name
+                    END as action_by
+                FROM appointments
+                ORDER BY 
+                    CASE
+                        WHEN modified_at IS NOT NULL AND deleted_at IS NULL THEN modified_at
+                        WHEN deleted_at IS NOT NULL THEN deleted_at
+                        ELSE created_at
+                    END DESC
+                LIMIT 1
+            ''')
+            
+            last_action = self.cursor.fetchone()
+            
+            if last_action:
+                action_type, action_time, day, time, doc_type, client_name, action_by = last_action
+                
+                # Formatăm datele pentru afișare
+                try:
+                    # Data acțiunii (creare/modificare/ștergere)
+                    action_datetime = datetime.datetime.strptime(action_time, "%Y-%m-%d %H:%M:%S")
+                    # Folosim luna cu nume întreg
+                    formatted_time = action_datetime.strftime("%d %B %Y %H:%M")
+                    # Înlocuim numele lunii în engleză cu numele lunii în română
+                    month_index = action_datetime.month - 1
+                    month_name_ro = self.month_names_ro[month_index]
+                    formatted_time = formatted_time.replace(action_datetime.strftime("%B"), month_name_ro)
+                    
+                    # Data programării
+                    appointment_date = datetime.datetime.strptime(day, "%Y-%m-%d")
+                    # Folosim luna cu nume întreg
+                    formatted_appointment_date = appointment_date.strftime("%d %B %Y")
+                    # Înlocuim numele lunii în engleză cu numele lunii în română
+                    month_index = appointment_date.month - 1
+                    month_name_ro = self.month_names_ro[month_index]
+                    formatted_appointment_date = formatted_appointment_date.replace(appointment_date.strftime("%B"), month_name_ro)
+                except:
+                    # În caz de eroare, folosim string-urile originale
+                    formatted_time = action_time[:16]
+                    formatted_appointment_date = day
+                
+                # Construim textul pentru ultima intervenție cu formatul nou, conform ultimei cerințe
+                action_text = f"Ultima intervenție: programare {action_type} de către {action_by}, {formatted_time}. ({doc_type}, {client_name}, {formatted_appointment_date})"
+                
+                # Permitem textului să fie mai lung (dublăm lungimea maximă)
+                max_length = 200  # Număr extins de caractere care încap în label
+                if len(action_text) > max_length:
+                    action_text = action_text[:max_length-3] + "..."
+                
+                self.last_action_label.setText(action_text)
+            else:
+                self.last_action_label.setText("Ultima intervenție: -")
+                
+        except Exception as e:
+            print(f"Eroare la actualizarea informațiilor despre ultima intervenție: {e}")
+            self.last_action_label.setText("Ultima intervenție: -")
         
     def show_calendar_dialog(self):
         """Afișează un dialog cu calendar pentru navigare rapidă"""
