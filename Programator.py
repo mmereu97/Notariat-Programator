@@ -730,46 +730,86 @@ class NotarialScheduler(QMainWindow):
         # Sortăm toate orele
         all_hours.sort(key=self.sort_time_key)
         
-        # Verificăm dacă există o programare de tip "Liber" în această zi
-        free_time_starts_from = None
-        first_appointment_after_free = None
-        
         # Filtrăm programările active
         active_appointments = [app for app in all_appointments if app[6] != 'deleted']
         
         # Sortăm programările după timp pentru procesare cronologică
         active_appointments.sort(key=lambda app: self.sort_time_key(app[1]))
         
-        # Identificăm ultima programare de tip "Liber" și prima programare non-Liber după aceasta
-        for i, app in enumerate(active_appointments):
-            if app[3] == "Liber":
-                free_time_starts_from = app[1]  # Ora de la care începe programul liber
-                first_appointment_after_free = None  # Resetăm variabila pentru această programare Liber
+        # Inițializăm dicționarul pentru a stoca informații despre intervale blocate
+        free_intervals = {}
+        
+        # Identificăm programările de tip "Liber" și calculăm câte intervale să blocăm
+        for app in active_appointments:
+            if app[3] == "Liber":  # Verificăm tipul documentului
+                free_time = app[1]  # Ora de la care începe programul liber
+                client_name = app[2]  # Numele clientului (poate conține numărul de intervale)
                 
-                # Căutăm prima programare non-Liber după această programare Liber
-                for next_app in active_appointments[i+1:]:
-                    if next_app[3] != "Liber":
-                        first_appointment_after_free = next_app[1]
+                # Determinăm câte intervale orare să blocăm
+                blocks_count = 0  # 0 = toate intervalele rămase din zi
+                
+                if client_name.isdigit():
+                    # Dacă numele clientului este un număr, îl folosim pentru numărul de intervale
+                    blocks_count = int(client_name)
+                
+                # Stocăm informațiile pentru utilizare ulterioară
+                free_intervals[free_time] = {
+                    'blocks_count': blocks_count,
+                    'next_appointment': None,  # Va fi setat mai târziu dacă există
+                    'affected_slots': []  # Va stoca intervalele afectate
+                }
+        
+        # Identificăm pentru fiecare programare "Liber" prima programare non-Liber care o urmează
+        for free_time, info in free_intervals.items():
+            free_time_value = self.sort_time_key(free_time)
+            
+            # Găsim prima programare care nu este de tip "Liber" după această programare "Liber"
+            for app in active_appointments:
+                app_time = app[1]
+                app_time_value = self.sort_time_key(app_time)
+                
+                # Verificăm dacă această programare este după programarea "Liber" și nu este de tip "Liber"
+                if app_time_value > free_time_value and app[3] != "Liber":
+                    # Am găsit prima programare non-Liber după această programare Liber
+                    info['next_appointment'] = app_time
+                    break
+        
+        # Calculăm exact care intervale orare sunt afectate de fiecare programare "Liber"
+        for free_time, info in free_intervals.items():
+            free_time_value = self.sort_time_key(free_time)
+            blocks_count = info['blocks_count']
+            next_appointment = info['next_appointment']
+            next_appointment_value = self.sort_time_key(next_appointment) if next_appointment else None
+            
+            # Determinăm intervalele afectate
+            count = 0
+            for time_str in all_hours:
+                time_value = self.sort_time_key(time_str)
+                
+                # Verificăm dacă acest interval este după programarea "Liber"
+                if time_value >= free_time_value:
+                    # Verificăm dacă am ajuns la programarea următoare (dacă există)
+                    if next_appointment and time_value >= next_appointment_value:
                         break
+                        
+                    # Verificăm dacă am atins numărul maxim de intervale blocate
+                    if blocks_count > 0 and count >= blocks_count:
+                        break
+                        
+                    info['affected_slots'].append(time_str)
+                    count += 1
         
         # Creăm intervalele orare pentru fiecare oră din listă
         for time_str in all_hours:
-            # Determinăm dacă această oră este după ora de început a programului liber
-            is_after_free_time = False
-            if free_time_starts_from:
-                # Comparăm orele folosind funcția noastră de sortare
-                current_time_value = self.sort_time_key(time_str)
-                free_time_value = self.sort_time_key(free_time_starts_from)
-                
-                # Verificăm dacă suntem după ora Liber
-                if current_time_value >= free_time_value:
-                    is_after_free_time = True
-                    
-                    # Verificăm dacă suntem după prima programare non-Liber (dacă există)
-                    if first_appointment_after_free and current_time_value >= self.sort_time_key(first_appointment_after_free):
-                        is_after_free_time = False
+            # Determinăm dacă această oră este blocată de o programare "Liber"
+            is_free_time = False
             
-            self.create_time_slot(parent_layout, day_date, time_str, is_after_free_time)
+            for free_time, info in free_intervals.items():
+                if time_str in info['affected_slots']:
+                    is_free_time = True
+                    break
+            
+            self.create_time_slot(parent_layout, day_date, time_str, is_free_time)
     
     def create_time_slot(self, parent_layout, day_date, time_str, is_free_time=False):
         """Creare un singur interval orar pentru o oră specifică"""
@@ -1032,10 +1072,25 @@ class NotarialScheduler(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             values = dialog.get_values()
             
-            # Verificăm dacă tipul de document este "Liber" și clientul nu a fost completat
-            if values['document_type'] == "Liber" and (not values['client_name'] or values['client_name'].strip() == ""):
-                values['client_name'] = "N/A"  # Completăm automat cu "N/A" pentru programările de tip "Liber"
-                
+            # Verificăm dacă tipul de document este "Liber"
+            if values['document_type'] == "Liber":
+                # Verificăm dacă clientul conține un număr sau este gol
+                client_name = values['client_name'].strip()
+                if not client_name:
+                    # Dacă e gol, folosim N/A (comportamentul implicit - tot restul zilei blocat)
+                    values['client_name'] = "N/A"
+                elif client_name.isdigit():
+                    # Dacă e un număr, îl păstrăm ca atare (va specifica numărul de intervale blocate)
+                    values['client_name'] = client_name
+                else:
+                    # Dacă nu e număr, adăugăm un mesaj în observații pentru clarificare
+                    if not values['observations']:
+                        values['observations'] = ""
+                    values['observations'] += f"\nNotă: S-a introdus \"{client_name}\" în loc de un număr. " + \
+                                             "Pentru a specifica numărul exact de intervale blocate, " + \
+                                             "introduceți doar un număr (1, 2, 3, etc.)."
+                    # Păstrăm valoarea introdusă (va fi interpretată ca N/A - tot restul zilei blocat)
+                    
             self.save_appointment(day, values['time'], values['client_name'], values['document_type'], values['observations'])
     
     def edit_appointment(self, day, time, appointment_id):
@@ -1067,6 +1122,26 @@ class NotarialScheduler(QMainWindow):
         
         if dialog.exec_() == QDialog.Accepted:
             values = dialog.get_values()
+            
+            # Verificăm dacă tipul de document este "Liber"
+            if values['document_type'] == "Liber":
+                # Verificăm dacă clientul conține un număr sau este gol
+                client_name = values['client_name'].strip()
+                if not client_name:
+                    # Dacă e gol, folosim N/A (comportamentul implicit - tot restul zilei blocat)
+                    values['client_name'] = "N/A"
+                elif client_name.isdigit():
+                    # Dacă e un număr, îl păstrăm ca atare (va specifica numărul de intervale blocate)
+                    values['client_name'] = client_name
+                else:
+                    # Dacă nu e număr, adăugăm un mesaj în observații pentru clarificare
+                    if not values['observations']:
+                        values['observations'] = ""
+                    values['observations'] += f"\nNotă: S-a introdus \"{client_name}\" în loc de un număr. " + \
+                                             "Pentru a specifica numărul exact de intervale blocate, " + \
+                                             "introduceți doar un număr (1, 2, 3, etc.)."
+                    # Păstrăm valoarea introdusă (va fi interpretată ca N/A - tot restul zilei blocat)
+            
             self.update_appointment(appointment_id, values['client_name'], values['document_type'], values['time'], values['observations'])
     
     def handle_delete_from_dialog(self, appointment_id, dialog):
