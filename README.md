@@ -53,9 +53,7 @@ Programator Acte Notariale este o aplicație pentru birouri notariale care permi
 
 - **Dialog calendar**: Salt rapid la orice dată din calendar
 
-- Curs valutar BNR actualizat automat
-
-  :
+- Curs valutar BNR actualizat automat:
 
   - Afișare curs Euro-Lei cu actualizare automată la fiecare oră
   - Indicatori vizuali pentru tendința cursului (crescător/descrescător)
