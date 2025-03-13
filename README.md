@@ -28,9 +28,7 @@ Programator Acte Notariale este o aplicație pentru birouri notariale care permi
 
 - **Tip de programare "Liber"**: Marcare specială pentru timpul indisponibil
 
-- Blocare selectivă a intervalelor orare
-
-  :
+- Blocare selectivă a intervalelor orare:
 
   - Introducerea unui număr (ex: "1", "2", "3") în câmpul client va bloca exact atâtea intervale orare consecutive
   - Lăsarea câmpului gol sau "N/A" va bloca toate intervalele rămase din ziua respectivă
