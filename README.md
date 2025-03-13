@@ -92,6 +92,9 @@ Aplicația include un sistem automat de înregistrare a tuturor intervențiilor 
 ## Instalare
 
 ### Pași de instalare
+- Pentru utilizatori simpli cu Windows, e suficient sa descarcati fisierul programator.exe si sa il lansati
+- Pentru dezvotatori:
+
 ```bash
 # Clonați repository-ul:
 git clone https://github.com/utilizator/programator-acte-notariale.git
