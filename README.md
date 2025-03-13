@@ -6,6 +6,8 @@ O aplicație desktop pentru gestionarea și programarea actelor notariale, dezvo
 
 Programator Acte Notariale este o aplicație pentru birouri notariale care permite gestionarea eficientă a programărilor și actelor notariale. Aplicația oferă o interfață intuitivă de tip calendar săptămânal, cu posibilitatea de a adăuga, edita și șterge programări pentru clienți.
 
+![Screenshot aplicație](Capture.PNG)
+
 ## Funcționalități
 
 ### Gestionare programări
