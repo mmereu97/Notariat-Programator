@@ -209,6 +209,9 @@ class AddDocumentTypeDialog(QDialog):
 class NotarialScheduler(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Adăugăm un flag pentru a preveni duplicarea înregistrărilor la pornire
+        self.initial_startup = True
         
         # Configurare fereastră principală
         self.setWindowTitle("Programator Acte Notariale")
@@ -246,14 +249,12 @@ class NotarialScheduler(QMainWindow):
             "Comodat",
             "Consultație",
             "Dezmembrare",
+            "Dezmembrare + vânzare",
+            "Divorț",
             "Donație",
             "Donație+Uzufruct",
-            "Divorț",
             "Ipotecă",
-            "Împrumut",
-            "Încetare contract de Întreținere",
-            "Închiriere",
-            "Întreținere",
+            "Liber",
             "Novație",
             "Partaj voluntar",
             "Renunțare drept de Uzufruct",
@@ -261,10 +262,14 @@ class NotarialScheduler(QMainWindow):
             "Succesiune",
             "Superficie",
             "Supliment",
-            "Vânzare +Uzufruct viager",
-            "Vânzare Drepturi Succesorale",
+            "Testament",
             "Vânzare",
-            "Liber"
+            "Vânzare Drepturi Succesorale",
+            "Vânzare+Uzufruct viager",
+            "Împrumut",
+            "Încetare contract de Întreținere",
+            "Închiriere",
+            "Întreținere"
         ]
         
         # Inițializare bază de date
@@ -285,6 +290,10 @@ class NotarialScheduler(QMainWindow):
         self.create_calendar(main_layout)
         self.create_footer(main_layout)
         self.update_last_action_label()
+
+        # La final, după ce interfața este configurată și datele încărcate
+        # Setăm flag-ul la False pentru a permite înregistrarea următoarelor intervenții
+        self.initial_startup = False
     
     def init_database(self):
         """Inițializare bază de date SQLite și încărcare tipuri de documente din JSON"""
@@ -723,10 +732,25 @@ class NotarialScheduler(QMainWindow):
         
         # Verificăm dacă există o programare de tip "Liber" în această zi
         free_time_starts_from = None
-        for app in all_appointments:
-            if app[3] == "Liber" and app[6] != 'deleted':  # Verifică tipul documentului și statusul
+        first_appointment_after_free = None
+        
+        # Filtrăm programările active
+        active_appointments = [app for app in all_appointments if app[6] != 'deleted']
+        
+        # Sortăm programările după timp pentru procesare cronologică
+        active_appointments.sort(key=lambda app: self.sort_time_key(app[1]))
+        
+        # Identificăm ultima programare de tip "Liber" și prima programare non-Liber după aceasta
+        for i, app in enumerate(active_appointments):
+            if app[3] == "Liber":
                 free_time_starts_from = app[1]  # Ora de la care începe programul liber
-                break
+                first_appointment_after_free = None  # Resetăm variabila pentru această programare Liber
+                
+                # Căutăm prima programare non-Liber după această programare Liber
+                for next_app in active_appointments[i+1:]:
+                    if next_app[3] != "Liber":
+                        first_appointment_after_free = next_app[1]
+                        break
         
         # Creăm intervalele orare pentru fiecare oră din listă
         for time_str in all_hours:
@@ -734,7 +758,16 @@ class NotarialScheduler(QMainWindow):
             is_after_free_time = False
             if free_time_starts_from:
                 # Comparăm orele folosind funcția noastră de sortare
-                is_after_free_time = self.sort_time_key(time_str) >= self.sort_time_key(free_time_starts_from)
+                current_time_value = self.sort_time_key(time_str)
+                free_time_value = self.sort_time_key(free_time_starts_from)
+                
+                # Verificăm dacă suntem după ora Liber
+                if current_time_value >= free_time_value:
+                    is_after_free_time = True
+                    
+                    # Verificăm dacă suntem după prima programare non-Liber (dacă există)
+                    if first_appointment_after_free and current_time_value >= self.sort_time_key(first_appointment_after_free):
+                        is_after_free_time = False
             
             self.create_time_slot(parent_layout, day_date, time_str, is_after_free_time)
     
@@ -1078,12 +1111,18 @@ class NotarialScheduler(QMainWindow):
             'INSERT INTO appointments (day, time, client_name, document_type, computer_name, status, observations) VALUES (?, ?, ?, ?, ?, "active", ?)',
             (day.strftime('%Y-%m-%d'), time, client_name, doc_type, self.computer_name, observations)
         )
+        
+        # Obținem ID-ul nou creat
+        appointment_id = self.cursor.lastrowid
         self.conn.commit()
+        
+        # Logăm observațiile dacă există
+        if observations and observations.strip():
+            self.log_observations_changes(appointment_id, "", observations, "creare")
         
         self.refresh_calendar()
         self.update_last_action_label()  # Actualizăm label-ul
 
-    # 3.2 Modificare pentru update_appointment
     def update_appointment(self, appointment_id, client_name, doc_type, time, observations=""):
         """Actualizare programare existentă în baza de date"""
         if not client_name or not doc_type or not time:
@@ -1095,6 +1134,12 @@ class NotarialScheduler(QMainWindow):
             QMessageBox.critical(self, "Eroare", "Format oră invalid. Folosiți formatul HH:MM (exemplu: 12:30).")
             return
         
+        # Obținem observațiile vechi pentru comparație
+        self.cursor.execute('SELECT observations FROM appointments WHERE id = ?', (appointment_id,))
+        result = self.cursor.fetchone()
+        old_observations = result[0] if result and result[0] else ""
+        
+        # Actualizăm programarea
         self.cursor.execute(
             '''UPDATE appointments 
                SET client_name = ?, 
@@ -1109,9 +1154,13 @@ class NotarialScheduler(QMainWindow):
         )
         self.conn.commit()
         
+        # Logăm modificările la observații
+        self.log_observations_changes(appointment_id, old_observations, observations, "modificare")
+        
         self.refresh_calendar()
-        self.update_last_action_label()  # Actualizăm label-ul    
+        self.update_last_action_label()  # Actualizăm label-ul
 
+    
     def validate_time_format(self, time_str):
         """Validează formatul orei (HH:MM)"""
         try:
@@ -1166,6 +1215,11 @@ class NotarialScheduler(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
+            # Obținem observațiile pentru logging înainte de a marca programarea ca ștearsă
+            self.cursor.execute('SELECT observations FROM appointments WHERE id = ?', (appointment_id,))
+            result = self.cursor.fetchone()
+            old_observations = result[0] if result and result[0] else ""
+            
             # In loc să ștergeți, actualizați statusul și adăugați informații despre ștergere
             self.cursor.execute(
                 '''UPDATE appointments 
@@ -1176,6 +1230,11 @@ class NotarialScheduler(QMainWindow):
                 (self.computer_name, appointment_id)
             )
             self.conn.commit()
+            
+            # Logăm ștergerea observațiilor dacă există
+            if old_observations and old_observations.strip():
+                self.log_observations_changes(appointment_id, old_observations, "", "ștergere")
+            
             self.refresh_calendar()
             self.update_last_action_label()  # Actualizăm label-ul
             
@@ -1612,26 +1671,25 @@ class NotarialScheduler(QMainWindow):
         footer_frame = QFrame()
         footer_frame.setFrameStyle(QFrame.StyledPanel)
         footer_frame.setLineWidth(1)
-        footer_frame.setFixedHeight(40)  # Revenim la înălțimea inițială
+        footer_frame.setFixedHeight(50)  # Mărește înălțimea de la 40 la 50
         parent_layout.addWidget(footer_frame)
         
         footer_layout = QHBoxLayout(footer_frame)
         footer_layout.setContentsMargins(10, 5, 10, 5)
         
-        # Label pentru ultima intervenție
+        # Label pentru ultima intervenție - font mărit
         self.last_action_label = QLabel("Ultima intervenție: -")
-        self.last_action_label.setFont(QFont("Arial", 10, QFont.Bold))
+        self.last_action_label.setFont(QFont("Arial", 12, QFont.Bold))  # Mărit de la 10 la 12
         self.last_action_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         # Modificăm layout-ul pentru a oferi mai mult spațiu orizontal
         footer_layout.addWidget(self.last_action_label, 3)  # Creștem stretch factor-ul de la 1 la 3
-        footer_layout.addWidget(self.last_action_label, 1)  # 1 = stretch factor
         
-        # Numele autorului în dreapta
+        # Numele autorului în dreapta - font mărit
         author_label = QLabel("Mihai Mereu")
-        author_label.setFont(QFont("Arial", 10, QFont.Bold))
+        author_label.setFont(QFont("Arial", 12, QFont.Bold))  # Mărit de la 10 la 12
         author_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        author_label.setFixedWidth(150)  # Fixăm lățimea numelui pentru a permite mai mult spațiu pentru label-ul de intervenție
+        author_label.setFixedWidth(180)  # Mărit de la 150 la 180 pentru a acomoda fontul mai mare
         footer_layout.addWidget(author_label)
         
         # Inițializăm label-ul cu ultima acțiune
@@ -1647,14 +1705,100 @@ class NotarialScheduler(QMainWindow):
             # Adăugăm timestamp actual pentru însemnarea în log
             timestamp = current_date.strftime("%Y-%m-%d %H:%M:%S")
             
-            # Scriem în fișierul de log (mod append)
-            with open(log_filename, "a", encoding="utf-8") as log_file:
-                # Adăugăm timestamp și textul intervenției
-                log_file.write(f"[{timestamp}] {action_text}\n")
+            # Verificăm ultima linie din log pentru a evita duplicarea
+            last_log_line = ""
+            try:
+                if os.path.exists(log_filename):
+                    with open(log_filename, "r", encoding="utf-8") as read_file:
+                        lines = read_file.readlines()
+                        if lines:
+                            last_log_line = lines[-1].strip()
+            except Exception:
+                pass
+            
+            # Construim noua linie de log
+            new_log_line = f"[{timestamp}] {action_text}"
+            
+            # Verificăm dacă nu este o duplicare a ultimei înregistrări
+            if new_log_line != last_log_line:
+                # Scriem în fișierul de log (mod append)
+                with open(log_filename, "a", encoding="utf-8") as log_file:
+                    # Adăugăm timestamp și textul intervenției
+                    log_file.write(f"{new_log_line}\n")
+                    
+                print(f"Intervenție înregistrată în log: {log_filename}")
+            else:
+                print(f"Intervenție duplicată, nu a fost înregistrată în log")
                 
-            print(f"Intervenție înregistrată în log: {log_filename}")
         except Exception as e:
             print(f"Eroare la scrierea în fișierul de log: {e}")
+
+    def log_observations_changes(self, appointment_id, old_observations, new_observations, action_type="modificare"):
+        """
+        Înregistrează modificările făcute la câmpul de observații în fișierul de log general
+        
+        Parameters:
+        -----------
+        appointment_id : int
+            ID-ul programării
+        old_observations : str
+            Textul observațiilor înainte de modificare
+        new_observations : str
+            Textul observațiilor după modificare
+        action_type : str
+            Tipul acțiunii: "creare", "modificare", "ștergere"
+        """
+        try:
+            # Obținem detalii despre programare pentru context
+            self.cursor.execute('''
+                SELECT day, time, client_name, document_type
+                FROM appointments
+                WHERE id = ?
+            ''', (appointment_id,))
+            
+            appointment_details = self.cursor.fetchone()
+            if not appointment_details:
+                print(f"Nu s-au găsit detalii pentru programarea cu ID-ul {appointment_id}")
+                return
+                
+            day, time, client_name, document_type = appointment_details
+            
+            # Determinăm tipul de modificare și formatăm mesajul corespunzător
+            if action_type == "creare":
+                if new_observations and new_observations.strip():
+                    change_description = f"OBSERVAȚII NOI: \"{new_observations}\""
+                else:
+                    # Nu logăm dacă nu s-au adăugat observații la creare
+                    return
+            elif action_type == "modificare":
+                if old_observations == new_observations:
+                    # Nu logăm dacă nu s-a schimbat nimic
+                    return
+                elif not old_observations or old_observations.strip() == "":
+                    change_description = f"OBSERVAȚII ADĂUGATE: \"{new_observations}\""
+                elif not new_observations or new_observations.strip() == "":
+                    change_description = f"OBSERVAȚII ȘTERSE: Era: \"{old_observations}\""
+                else:
+                    change_description = f"OBSERVAȚII MODIFICATE:\n  Vechi: \"{old_observations}\"\n  Nou: \"{new_observations}\""
+            else:  # ștergere
+                if old_observations and old_observations.strip():
+                    change_description = f"OBSERVAȚII ȘTERSE (odată cu programarea): \"{old_observations}\""
+                else:
+                    # Nu logăm dacă nu erau observații
+                    return
+                    
+            # Formatăm data programării pentru afișare
+            appointment_date = datetime.datetime.strptime(day, "%Y-%m-%d")
+            formatted_date = f"{appointment_date.day} {self.month_names_ro[appointment_date.month-1]} {appointment_date.year}"
+            
+            # Creăm mesajul pentru log
+            action_text = f"{action_type.upper()} OBSERVAȚII - Programare {client_name}, {document_type}, {formatted_date}, ora {time} - {change_description}"
+            
+            # Folosim metoda existentă pentru a scrie în log
+            self.log_intervention(action_text)
+                
+        except Exception as e:
+            print(f"Eroare la scrierea modificărilor observațiilor în fișierul de log: {e}")
 
     # 2. Adăugăm o metodă nouă pentru a obține ultima intervenție
     def update_last_action_label(self):
@@ -1721,7 +1865,7 @@ class NotarialScheduler(QMainWindow):
                     formatted_time = action_time[:16]
                     formatted_appointment_date = day
                 
-                # Construim textul pentru ultima intervenție cu formatul nou, conform ultimei cerințe
+                # Construim textul pentru ultima intervenție cu formatul nou
                 action_text = f"Ultima intervenție: programare {action_type} de către {action_by}, {formatted_time}. ({doc_type}, {client_name}, {formatted_appointment_date})"
                 
                 # Permitem textului să fie mai lung (dublăm lungimea maximă)
@@ -1731,11 +1875,15 @@ class NotarialScheduler(QMainWindow):
                 
                 self.last_action_label.setText(action_text)
                 
-                # Adăugăm înregistrarea în log (NOUĂ)
-                self.log_intervention(action_text)
+                # Nu înregistrăm în log dacă suntem la pornirea inițială a aplicației
+                if hasattr(self, 'initial_startup') and self.initial_startup:
+                    print("Pornire inițială - nu se scrie în log ultima intervenție")
+                else:
+                    # Adăugăm înregistrarea în log
+                    self.log_intervention(action_text)
             else:
                 self.last_action_label.setText("Ultima intervenție: -")
-                
+                    
         except Exception as e:
             print(f"Eroare la actualizarea informațiilor despre ultima intervenție: {e}")
             self.last_action_label.setText("Ultima intervenție: -")
@@ -2202,14 +2350,14 @@ class EditableLabel(QLabel):
                     )
 
 class CurrencyFetcher(QThread):
-    """Thread separat pentru preluarea cursului valutar"""
+    """Thread separat pentru preluarea cursului valutar BNR"""
     currency_fetched = pyqtSignal(dict)
     
     def run(self):
         try:
             print("\n--- Încercare preluare curs valutar ---")
-            # Preluăm cursul de pe site-ul BNR
-            currency_data = self.fetch_bnr_exchange_rate()
+            # Preluăm cursul de pe site-ul alternativ
+            currency_data = self.fetch_currency()
             print(f"Date curs obținute: {currency_data}")
             self.currency_fetched.emit(currency_data)
         except Exception as e:
@@ -2217,134 +2365,8 @@ class CurrencyFetcher(QThread):
             # Emitem un dict gol în caz de eroare
             self.currency_fetched.emit({})
     
-    def fetch_bnr_exchange_rate(self):
-        """Preia cursul Euro-Leu de pe site-ul BNR"""
-        try:
-            # Încercăm mai întâi cu BNR
-            print("Încercare preluare de pe BNR...")
-            result = self.fetch_from_bnr()
-            if result and 'rate' in result:
-                print(f"Curs obținut cu succes de pe BNR: {result}")
-                return result
-                
-            # Dacă nu merge BNR, încercăm cu cursbnr.ro
-            print("BNR nu a funcționat, încercare pe cursbnr.ro...")
-            result = self.fetch_from_cursbnr()
-            if result and 'rate' in result:
-                print(f"Curs obținut cu succes de pe cursbnr.ro: {result}")
-                return result
-            
-            # Dacă nu merge nici cursbnr.ro, încercăm cu curs-valutar-bnr.ro
-            print("cursbnr.ro nu a funcționat, încercare pe curs-valutar-bnr.ro...")
-            result = self.fetch_from_curs_valutar_bnr()
-            if result and 'rate' in result:
-                print(f"Curs obținut cu succes de pe curs-valutar-bnr.ro: {result}")
-                return result
-            
-            print("Nu s-a putut obține cursul de pe niciuna din sursele încercate.")
-            return {}
-            
-        except Exception as e:
-            print(f"Eroare generală la preluarea cursului: {e}")
-            return {}
-            
-    def fetch_from_bnr(self):
-        """Preluare de pe site-ul BNR oficial"""
-        try:
-            url = "https://www.bnr.ro/Cursul-de-schimb--7372.aspx"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            
-            print(f"GET request la {url}")
-            response = requests.get(url, headers=headers, timeout=10)
-            print(f"Status code: {response.status_code}")
-            
-            if response.status_code != 200:
-                print(f"Eroare HTTP: {response.status_code}")
-                return {}
-                
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Căutăm Euro în tabelul de cursuri
-            euro_rate = None
-            variation = None
-            
-            # Căutăm tabelul cu cursurile
-            tables = soup.find_all('table')
-            print(f"Am găsit {len(tables)} tabele în pagină")
-            
-            for i, table in enumerate(tables):
-                print(f"Analizez tabelul {i+1}")
-                rows = table.find_all('tr')
-                print(f"  - {len(rows)} rânduri găsite")
-                
-                for row in rows:
-                    cells = row.find_all('td')
-                    if len(cells) >= 3:
-                        currency = cells[0].get_text().strip()
-                        print(f"  - Analizez rând cu moneda: {currency}")
-                        
-                        if "EUR" in currency:
-                            rate_text = cells[2].get_text().strip()
-                            print(f"  - Text rată EUR: {rate_text}")
-                            
-                            # Extragem valoarea numerică
-                            rate_match = re.search(r'(\d+[.,]\d+)', rate_text)
-                            if rate_match:
-                                euro_rate = rate_match.group(1).replace(',', '.')
-                                print(f"  - Valoare extrasă: {euro_rate}")
-                            
-                            # Încercăm să găsim variația
-                            if len(cells) >= 4:
-                                var_text = cells[3].get_text().strip()
-                                print(f"  - Text variație: {var_text}")
-                                
-                                var_match = re.search(r'([+-]?\d+[.,]\d+)', var_text)
-                                if var_match:
-                                    variation = var_match.group(1).replace(',', '.')
-                                    print(f"  - Variație extrasă: {variation}")
-                            
-                            break
-                
-                if euro_rate:
-                    break
-            
-            # Dacă nu am găsit în format tabel, încercăm să căutăm în alt format
-            if not euro_rate:
-                print("Nu am găsit în tabele, caut în tot documentul...")
-                euro_elements = soup.find_all(string=re.compile('EUR'))
-                print(f"Am găsit {len(euro_elements)} elemente cu 'EUR'")
-                
-                for elem in euro_elements:
-                    parent = elem.parent
-                    if parent:
-                        rate_text = parent.get_text()
-                        print(f"Text element EUR: {rate_text}")
-                        
-                        rate_match = re.search(r'EUR.*?(\d+[.,]\d+)', rate_text)
-                        if rate_match:
-                            euro_rate = rate_match.group(1).replace(',', '.')
-                            print(f"Valoare extrasă: {euro_rate}")
-                            break
-            
-            # Construim rezultatul
-            result = {}
-            if euro_rate:
-                result['rate'] = float(euro_rate)
-                if variation:
-                    result['variation'] = float(variation)
-                    result['direction'] = 'up' if float(variation) > 0 else 'down' if float(variation) < 0 else 'same'
-                else:
-                    result['variation'] = 0.0
-                    result['direction'] = 'same'
-                    
-            return result
-            
-        except Exception as e:
-            print(f"Eroare specifică BNR: {e}")
-            return {}
-    
-    def fetch_from_cursbnr(self):
-        """Preluare de pe cursbnr.ro"""
+    def fetch_currency(self):
+        """Preia cursul Euro-Leu de pe cursbnr.ro"""
         try:
             url = "https://www.cursbnr.ro/"
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -2378,7 +2400,6 @@ class CurrencyFetcher(QThread):
                     continue
                     
                 container_text = container.get_text()
-                print(f"Text container: {container_text}")
                 
                 # Căutăm valoarea Euro
                 rate_match = re.search(r'(\d+[.,]\d+)\s*(?:RON|lei)', container_text, re.IGNORECASE)
@@ -2386,19 +2407,16 @@ class CurrencyFetcher(QThread):
                     euro_rate = rate_match.group(1).replace(',', '.')
                     print(f"Valoare extrasă: {euro_rate}")
                     
-                    # Căutăm variația
-                    variation_match = re.search(r'([+-]?\d+[.,]\d+)%', container_text)
+                    # Căutăm variația directă în lei
+                    variation_match = re.search(r'1 EURO = \d+[.,]\d+ Lei\s*([+-]?\d+[.,]\d+)', container_text, re.IGNORECASE)
                     variation = 0.0
                     direction = 'same'
                     
                     if variation_match:
-                        var_percent = float(variation_match.group(1).replace(',', '.'))
-                        print(f"Variație procent: {var_percent}%")
-                        
-                        # Aproximăm variația în lei pe baza procentului
-                        rate_float = float(euro_rate)
-                        variation = (var_percent * rate_float) / 100
-                        direction = 'up' if var_percent > 0 else 'down' if var_percent < 0 else 'same'
+                        variation_str = variation_match.group(1).replace(',', '.')
+                        variation = float(variation_str)
+                        print(f"Variație: {variation} Lei")
+                        direction = 'up' if variation > 0 else 'down' if variation < 0 else 'same'
                     
                     return {
                         'rate': float(euro_rate),
@@ -2409,83 +2427,7 @@ class CurrencyFetcher(QThread):
             return {}
             
         except Exception as e:
-            print(f"Eroare cursbnr.ro: {e}")
-            return {}
-    
-    def fetch_from_curs_valutar_bnr(self):
-        """Preluare de pe curs-valutar-bnr.ro"""
-        try:
-            url = "https://www.curs-valutar-bnr.ro/"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            
-            print(f"GET request la {url}")
-            response = requests.get(url, headers=headers, timeout=10)
-            print(f"Status code: {response.status_code}")
-            
-            if response.status_code != 200:
-                print(f"Eroare HTTP: {response.status_code}")
-                return {}
-                
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Căutăm elementul cu Euro
-            euro_elements = soup.find_all(string=re.compile('EUR|Euro', re.IGNORECASE))
-            print(f"Am găsit {len(euro_elements)} elemente cu 'EUR/Euro'")
-            
-            for elem in euro_elements:
-                row = elem.parent
-                if not row:
-                    continue
-                    
-                # Urcăm în ierarhie pentru a găsi rândul complet
-                while row and row.name != 'tr':
-                    row = row.parent
-                
-                if not row:
-                    continue
-                
-                cells = row.find_all('td')
-                if len(cells) < 3:
-                    continue
-                    
-                row_text = row.get_text()
-                print(f"Text rând: {row_text}")
-                
-                # Căutăm valoarea Euro în celule
-                value_cell = cells[2] if len(cells) > 2 else None
-                if value_cell:
-                    value_text = value_cell.get_text().strip()
-                    print(f"Text valoare: {value_text}")
-                    
-                    rate_match = re.search(r'(\d+[.,]\d+)', value_text)
-                    if rate_match:
-                        euro_rate = rate_match.group(1).replace(',', '.')
-                        print(f"Valoare extrasă: {euro_rate}")
-                        
-                        # Încercăm să găsim variația
-                        variation_cell = cells[3] if len(cells) > 3 else None
-                        variation = 0.0
-                        direction = 'same'
-                        
-                        if variation_cell:
-                            var_text = variation_cell.get_text().strip()
-                            print(f"Text variație: {var_text}")
-                            
-                            var_match = re.search(r'([+-]?\d+[.,]\d+)', var_text)
-                            if var_match:
-                                variation = float(var_match.group(1).replace(',', '.'))
-                                direction = 'up' if variation > 0 else 'down' if variation < 0 else 'same'
-                        
-                        return {
-                            'rate': float(euro_rate),
-                            'variation': variation,
-                            'direction': direction
-                        }
-            
-            return {}
-            
-        except Exception as e:
-            print(f"Eroare curs-valutar-bnr.ro: {e}")
+            print(f"Eroare la preluarea cursului: {e}")
             return {}
 
 class CurrencyWidget(QFrame):
