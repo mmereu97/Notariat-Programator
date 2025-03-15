@@ -1,2 +1,5 @@
+.venv/
+.idea/
+build/
 notarial_scheduler.db
 document_types.json
