@@ -215,8 +215,15 @@ class NotarialScheduler(QMainWindow):
         
         # Configurare fereastră principală
         self.setWindowTitle("Programator Acte Notariale")
-        self.setMinimumSize(2560, 1300)
-    
+        self.setMinimumSize(1600, 900)
+        
+        # Încercăm să restaurăm poziția și dimensiunea ferestrei salvate
+        if not self.restore_window_position():
+            # Dacă nu avem setări salvate, folosim valorile implicite
+            self.resize(2560, 1300)  # Dimensiune inițială pentru ecran Full HD
+        
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
+        
         # Adăugăm setarea iconiței aici
         self.set_application_icon()
 
@@ -406,6 +413,92 @@ class NotarialScheduler(QMainWindow):
                 self.setWindowIcon(QIcon(icon_path))
         except Exception as e:
             print(f"Eroare la setarea iconiței: {e}")
+
+    def save_window_position(self):
+        """Salvează poziția și dimensiunea ferestrei în JSON"""
+        window_settings = {
+            'x': self.x(),
+            'y': self.y(),
+            'width': self.width(),
+            'height': self.height(),
+            'maximized': self.isMaximized(),
+            'screen': {
+                'name': QApplication.primaryScreen().name(),
+                'width': QApplication.primaryScreen().size().width(),
+                'height': QApplication.primaryScreen().size().height()
+            }
+        }
+        
+        # Numele fișierului JSON pentru setările ferestrei
+        settings_file = 'window_settings.json'
+        
+        try:
+            with open(settings_file, 'w', encoding='utf-8') as file:
+                json.dump(window_settings, file, ensure_ascii=False, indent=4)
+            print(f"Poziția și dimensiunea ferestrei salvate în {settings_file}")
+        except Exception as e:
+            print(f"Eroare la salvarea poziției ferestrei: {e}")
+
+    def restore_window_position(self):
+        """Restaurează poziția și dimensiunea ferestrei din JSON"""
+        settings_file = 'window_settings.json'
+        
+        try:
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r', encoding='utf-8') as file:
+                    settings = json.load(file)
+                
+                # Verifică dacă rezoluția ecranului s-a schimbat
+                current_screen = QApplication.primaryScreen()
+                current_width = current_screen.size().width()
+                current_height = current_screen.size().height()
+                saved_width = settings.get('screen', {}).get('width', 0)
+                saved_height = settings.get('screen', {}).get('height', 0)
+                
+                # Calculează factorul de scalare dacă rezoluția s-a schimbat
+                width_scale = 1.0
+                height_scale = 1.0
+                
+                if saved_width > 0 and saved_height > 0:
+                    width_scale = current_width / saved_width
+                    height_scale = current_height / saved_height
+                
+                # Aplică poziția și dimensiunea, ajustate pentru noua rezoluție
+                x = int(settings.get('x', 0) * width_scale)
+                y = int(settings.get('y', 0) * height_scale)
+                width = int(settings.get('width', 1600) * width_scale)
+                height = int(settings.get('height', 900) * height_scale)
+                
+                # Asigură-te că fereastra nu e prea mare pentru ecran
+                if width > current_width:
+                    width = current_width - 100
+                if height > current_height:
+                    height = current_height - 100
+                    
+                # Asigură-te că fereastra e vizibilă pe ecranul curent
+                if x < 0:
+                    x = 0
+                if y < 0:
+                    y = 0
+                if x + width > current_width:
+                    x = 0
+                if y + height > current_height:
+                    y = 0
+                
+                # Setează poziția și dimensiunea
+                self.resize(width, height)
+                self.move(x, y)
+                
+                # Aplică starea maximizată dacă era salvată astfel
+                if settings.get('maximized', False):
+                    self.showMaximized()
+                    
+                print(f"Poziția și dimensiunea ferestrei restaurate din {settings_file}")
+                return True
+        except Exception as e:
+            print(f"Eroare la restaurarea poziției ferestrei: {e}")
+        
+        return False
 
     def load_document_types(self):
         """Încarcă tipurile de documente din fișierul JSON"""
@@ -625,6 +718,10 @@ class NotarialScheduler(QMainWindow):
         self.calendar_grid = QGridLayout()
         parent_layout.addLayout(self.calendar_grid, 1)  # 1 = stretch factor
         
+        # Setăm stretch factor pentru fiecare coloană pentru a asigura distribuirea uniformă
+        for i in range(6):
+            self.calendar_grid.setColumnStretch(i, 1)
+        
         # Creare frame-uri pentru zile
         self.day_frames = []
         for i in range(6):  # Luni până Sâmbătă
@@ -639,7 +736,7 @@ class NotarialScheduler(QMainWindow):
         day_frame.setLineWidth(2)
         
         # Set minimum width for day columns to allow for proper spacing
-        day_frame.setMinimumWidth(400)
+        day_frame.setMinimumWidth(250)
         
         self.calendar_grid.addWidget(day_frame, 0, column)
         
@@ -1461,8 +1558,8 @@ class NotarialScheduler(QMainWindow):
         # Creăm un dialog mai complex pentru gestionarea tipurilor de documente
         dialog = QDialog(self)
         dialog.setWindowTitle("Gestionare Tipuri de Documente")
-        dialog.setMinimumWidth(1800)  # Lățime mărită semnificativ pentru 2K
-        dialog.setMinimumHeight(1200)  # Înălțime mărită semnificativ pentru 2K
+        dialog.setMinimumWidth(1920)  # Lățime mărită semnificativ pentru 2K
+        dialog.setMinimumHeight(1080)  # Înălțime mărită semnificativ pentru 2K
         
         layout = QVBoxLayout(dialog)
         layout.setSpacing(20)  # Spațiere mărită între elemente
@@ -2308,8 +2405,26 @@ class NotarialScheduler(QMainWindow):
 
     def closeEvent(self, event):
         """Handler pentru închiderea ferestrei principale"""
+        # Salvează poziția și dimensiunea ferestrei
+        self.save_window_position()
+        
+        # Șterge lock-ul aplicației
         self.remove_app_lock()
+        
+        # Acceptă evenimentul de închidere
         event.accept()
+
+    def moveEvent(self, event):
+        """Handler pentru evenimentul de mișcare a ferestrei"""
+        super().moveEvent(event)
+        # Folosim un timer pentru a evita salvarea prea frecventă
+        QTimer.singleShot(500, self.save_window_position)
+
+    def resizeEvent(self, event):
+        """Handler pentru evenimentul de redimensionare a ferestrei"""
+        super().resizeEvent(event)
+        # Folosim un timer pentru a evita salvarea prea frecventă
+        QTimer.singleShot(500, self.save_window_position)
 
 class EditableLabel(QLabel):
     """Etichetă care permite editarea cu dublu click"""

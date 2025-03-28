@@ -4,4 +4,5 @@ build/
 dist/
 notarial_scheduler.db
 document_types.json
+window_settings.json
 *.log
