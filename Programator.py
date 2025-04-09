@@ -2539,6 +2539,7 @@ class EditableLabel(QLabel):
                         f"Nu s-a putut redenumi tipul de document: {e}"
                     )
 
+
 class CurrencyFetcher(QThread):
     """Thread separat pentru preluarea cursului valutar BNR"""
     currency_fetched = pyqtSignal(dict)
@@ -2546,6 +2547,10 @@ class CurrencyFetcher(QThread):
     def run(self):
         try:
             print("\n--- Încercare preluare curs valutar ---")
+            # Obținem ora curentă pentru logging
+            current_time = datetime.datetime.now().strftime("%H:%M:%S")
+            print(f"[{current_time}] Inițiere preluare curs valutar")
+            
             # Preluăm cursul de pe site-ul alternativ
             currency_data = self.fetch_currency()
             print(f"Date curs obținute: {currency_data}")
@@ -2574,6 +2579,8 @@ class CurrencyFetcher(QThread):
             # Căutăm elementul cu EURO
             euro_elements = soup.find_all(string=re.compile('EURO', re.IGNORECASE))
             print(f"Am găsit {len(euro_elements)} elemente cu 'EURO'")
+            
+            result = {}
             
             for elem in euro_elements:
                 parent = elem.parent
@@ -2608,11 +2615,20 @@ class CurrencyFetcher(QThread):
                         print(f"Variație: {variation} Lei")
                         direction = 'up' if variation > 0 else 'down' if variation < 0 else 'same'
                     
-                    return {
+                    result = {
                         'rate': float(euro_rate),
                         'variation': variation,
                         'direction': direction
                     }
+                    
+                    # Calculăm cursul precedent în funcție de variație
+                    prev_rate = float(euro_rate) - variation
+                    result['prev_rate'] = prev_rate
+                    
+                    # Adăugăm și timpul actualizării
+                    result['update_time'] = datetime.datetime.now().strftime("%H:%M")
+                    
+                    return result
             
             return {}
             
@@ -2629,7 +2645,7 @@ class CurrencyWidget(QFrame):
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
         self.setLineWidth(1)
         self.setFixedHeight(60)
-        self.setMinimumWidth(200)
+        self.setMinimumWidth(340)  # Mărit pentru a încăpea ambele cursuri
         self.setAutoFillBackground(True)
         
         # Fundal alb
@@ -2640,26 +2656,65 @@ class CurrencyWidget(QFrame):
         # Layout pentru widget
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 5, 10, 5)
+        layout.setSpacing(15)  # Spațiere mărită între elemente
         
-        # Săgeată pentru direcție - ACUM PRIMA
+        # Layout pentru cursul precedent
+        prev_layout = QVBoxLayout()
+        layout.addLayout(prev_layout)
+        
+        # Etichetă pentru cursul precedent
+        self.prev_header = QLabel("Curs precedent:")
+        self.prev_header.setFont(QFont("Arial", 9, QFont.Bold))
+        self.prev_header.setStyleSheet("color: #666666;")
+        prev_layout.addWidget(self.prev_header)
+        
+        # Valoarea cursului precedent
+        self.prev_rate_label = QLabel("...")
+        self.prev_rate_label.setFont(QFont("Arial", 11))
+        self.prev_rate_label.setStyleSheet("color: #666666;")
+        prev_layout.addWidget(self.prev_rate_label)
+        
+        # Separator vertical
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("color: #CCCCCC;")
+        layout.addWidget(separator)
+        
+        # Săgeată pentru direcție
         self.arrow_label = QLabel()
         self.arrow_label.setFixedSize(30, 30)
         self.arrow_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.arrow_label)
         
-        # Layout pentru informații curs - ACUM A DOUA
+        # Layout pentru informații curs actual
         info_layout = QVBoxLayout()
         layout.addLayout(info_layout)
         
+        # Etichetă pentru cursul actual
+        self.current_header = QLabel("Curs actual:")
+        self.current_header.setFont(QFont("Arial", 9, QFont.Bold))
+        info_layout.addWidget(self.current_header)
+        
         # Valoarea cursului
-        self.rate_label = QLabel("1 EURO = ... Lei")
+        self.rate_label = QLabel("...")
         self.rate_label.setFont(QFont("Arial", 12, QFont.Bold))
         info_layout.addWidget(self.rate_label)
         
+        # Layout pentru informații despre actualizare
+        update_layout = QVBoxLayout()
+        layout.addLayout(update_layout)
+        
+        # Etichetă pentru ora actualizării
+        self.update_time_label = QLabel("")
+        self.update_time_label.setFont(QFont("Arial", 9))
+        self.update_time_label.setStyleSheet("color: #666666;")
+        update_layout.addWidget(self.update_time_label, alignment=Qt.AlignRight | Qt.AlignVCenter)
+        
         # Variația cursului
         self.variation_label = QLabel("Se încarcă...")
-        self.variation_label.setFont(QFont("Arial", 10))
-        info_layout.addWidget(self.variation_label)
+        self.variation_label.setFont(QFont("Arial", 9))
+        update_layout.addWidget(self.variation_label, alignment=Qt.AlignRight | Qt.AlignVCenter)
         
         # Starea inițială - "Loading..."
         self.update_display(None)
@@ -2671,7 +2726,7 @@ class CurrencyWidget(QFrame):
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.fetch_currency)
         
-        # Preluăm cursul imediat și apoi o dată pe oră
+        # Preluăm cursul imediat și apoi o dată la 60 de minute
         self.fetch_currency()
         self.update_timer.start(60 * 60 * 1000)  # Actualizare la fiecare oră
     
@@ -2690,15 +2745,25 @@ class CurrencyWidget(QFrame):
         """Actualizează afișarea cu datele primite"""
         if not data:
             # Afișare "Loading..." sau valoare implicită
-            self.rate_label.setText("1 EURO = ... Lei")
+            self.rate_label.setText("...")
+            self.prev_rate_label.setText("...")
             self.variation_label.setText("Se încarcă...")
             self.variation_label.setStyleSheet("color: gray;")
             self.arrow_label.setText("")
+            self.update_time_label.setText("")
             return
         
-        # Actualizare valoare curs
+        # Actualizare valoare curs actual
         rate = data.get('rate', 0.0)
-        self.rate_label.setText(f"1 EURO = {rate:.4f} Lei")
+        self.rate_label.setText(f"{rate:.4f} Lei")
+        
+        # Actualizare curs precedent
+        prev_rate = data.get('prev_rate', 0.0)
+        self.prev_rate_label.setText(f"{prev_rate:.4f} Lei")
+        
+        # Obținem ora curentă pentru afișarea momentului actualizării
+        current_time = datetime.datetime.now().strftime("%H:%M")
+        self.update_time_label.setText(f"Actualizat: {current_time}")
         
         # Actualizare variație
         variation = data.get('variation', 0.0)
@@ -2709,16 +2774,30 @@ class CurrencyWidget(QFrame):
             self.variation_label.setStyleSheet("color: green;")
             self.arrow_label.setText("▲")
             self.arrow_label.setStyleSheet("color: green; font-size: 18px;")
+            
+            # Evidențiem cursul actual ca fiind mai mare
+            self.rate_label.setStyleSheet("color: green;")
+            self.current_header.setStyleSheet("color: green;")
+            
         elif direction == 'down':
             self.variation_label.setText(f"{variation:.4f} Lei")
             self.variation_label.setStyleSheet("color: red;")
             self.arrow_label.setText("▼")
             self.arrow_label.setStyleSheet("color: red; font-size: 18px;")
+            
+            # Evidențiem cursul actual ca fiind mai mic
+            self.rate_label.setStyleSheet("color: red;")
+            self.current_header.setStyleSheet("color: red;")
+            
         else:
             self.variation_label.setText("0.0000 Lei")
             self.variation_label.setStyleSheet("color: gray;")
             self.arrow_label.setText("●")
             self.arrow_label.setStyleSheet("color: gray; font-size: 18px;")
+            
+            # Resetăm stilurile
+            self.rate_label.setStyleSheet("color: black;")
+            self.current_header.setStyleSheet("color: black;")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
