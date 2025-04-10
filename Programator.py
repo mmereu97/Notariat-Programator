@@ -1252,14 +1252,17 @@ class NotarialScheduler(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
-            # Marcăm programarea ca ștearsă
+            # Obținem timestamp-ul curent formatat
+            current_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Marcăm programarea ca ștearsă - folosim timestamp-ul generat din Python
             self.cursor.execute(
                 '''UPDATE appointments 
                    SET status = 'deleted', 
                        deleted_by = ?, 
-                       deleted_at = CURRENT_TIMESTAMP 
+                       deleted_at = ? 
                    WHERE id = ?''', 
-                (self.computer_name, appointment_id)
+                (self.computer_name, current_timestamp, appointment_id)
             )
             self.conn.commit()
             
@@ -1279,9 +1282,12 @@ class NotarialScheduler(QMainWindow):
             QMessageBox.critical(self, "Eroare", "Format oră invalid. Folosiți formatul HH:MM (exemplu: 12:30).")
             return
         
+        # Obținem timestamp-ul curent formatat
+        current_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         self.cursor.execute(
-            'INSERT INTO appointments (day, time, client_name, document_type, computer_name, status, observations) VALUES (?, ?, ?, ?, ?, "active", ?)',
-            (day.strftime('%Y-%m-%d'), time, client_name, doc_type, self.computer_name, observations)
+            'INSERT INTO appointments (day, time, client_name, document_type, computer_name, status, observations, created_at) VALUES (?, ?, ?, ?, ?, "active", ?, ?)',
+            (day.strftime('%Y-%m-%d'), time, client_name, doc_type, self.computer_name, observations, current_timestamp)
         )
         
         # Obținem ID-ul nou creat
@@ -1295,6 +1301,7 @@ class NotarialScheduler(QMainWindow):
         self.refresh_calendar()
         self.update_last_action_label()  # Actualizăm label-ul
 
+    # Modificare în metoda update_appointment - folosește direct ora PC-ului
     def update_appointment(self, appointment_id, client_name, doc_type, time, observations=""):
         """Actualizare programare existentă în baza de date"""
         if not client_name or not doc_type or not time:
@@ -1311,7 +1318,10 @@ class NotarialScheduler(QMainWindow):
         result = self.cursor.fetchone()
         old_observations = result[0] if result and result[0] else ""
         
-        # Actualizăm programarea
+        # Obținem timestamp-ul curent formatat
+        current_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Actualizăm programarea - folosim timestamp-ul generat din Python
         self.cursor.execute(
             '''UPDATE appointments 
                SET client_name = ?, 
@@ -1319,10 +1329,10 @@ class NotarialScheduler(QMainWindow):
                    time = ?,
                    status = 'modified', 
                    modified_by = ?, 
-                   modified_at = CURRENT_TIMESTAMP,
+                   modified_at = ?,
                    observations = ?
                WHERE id = ?''',
-            (client_name, doc_type, time, self.computer_name, observations, appointment_id)
+            (client_name, doc_type, time, self.computer_name, current_timestamp, observations, appointment_id)
         )
         self.conn.commit()
         
@@ -1331,7 +1341,6 @@ class NotarialScheduler(QMainWindow):
         
         self.refresh_calendar()
         self.update_last_action_label()  # Actualizăm label-ul
-
     
     def validate_time_format(self, time_str):
         """Validează formatul orei (HH:MM)"""
@@ -1392,14 +1401,18 @@ class NotarialScheduler(QMainWindow):
             result = self.cursor.fetchone()
             old_observations = result[0] if result and result[0] else ""
             
+            # Obținem timestamp-ul curent formatat
+            current_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
             # In loc să ștergeți, actualizați statusul și adăugați informații despre ștergere
+            # Folosim timestamp-ul generat din Python
             self.cursor.execute(
                 '''UPDATE appointments 
                    SET status = 'deleted', 
                        deleted_by = ?, 
-                       deleted_at = CURRENT_TIMESTAMP 
+                       deleted_at = ?
                    WHERE id = ?''', 
-                (self.computer_name, appointment_id)
+                (self.computer_name, current_timestamp, appointment_id)
             )
             self.conn.commit()
             
