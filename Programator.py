@@ -11,13 +11,13 @@ import atexit
 import signal
 from datetime import timedelta
 import calendar
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+from PyQt5.QtWidgets import (QMenu, QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QGridLayout, QLabel, QPushButton, 
                             QFrame, QScrollArea, QComboBox, QLineEdit, 
                             QDialog, QDialogButtonBox, QMessageBox, QFormLayout,
                             QCalendarWidget, QCheckBox, QTextEdit, QToolTip)
 from PyQt5.QtCore import Qt, QSize, QDate, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
+from PyQt5.QtGui import QFont, QColor, QPalette, QIcon, QTextCharFormat
 
 class AddEditAppointmentDialog(QDialog):
     """Dialog pentru adăugarea sau editarea unei programări"""
@@ -360,6 +360,34 @@ class NotarialScheduler(QMainWindow):
                 observations TEXT
             )
             ''')
+            self.conn.commit() # Adăugat commit aici pentru siguranță
+
+        # ######################################################################
+        # ### START MODIFICARE PENTRU ZILE NELUCRĂTOARE ###
+        # ######################################################################
+        
+        # Creare tabel pentru zile nelucrătoare dacă nu există
+        print("Creare tabel non_working_days (dacă nu există)")
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS non_working_days (
+            holiday_date DATE PRIMARY KEY
+        )
+        ''')
+        self.conn.commit()
+
+        # Inițializăm setul de zile nelucrătoare (va fi populat de load_non_working_days)
+        self.non_working_days_set = set() 
+        
+        # Încărcăm zilele nelucrătoare la pornire
+        # Metoda load_non_working_days() va fi definită mai târziu.
+        # Deocamdată, ne asigurăm că este apelată.
+        # Dacă rulezi codul înainte de a defini metoda, va da eroare.
+        # Vom adăuga definiția metodei în Pasul 2.
+        self.load_non_working_days() 
+
+        # ######################################################################
+        # ### END MODIFICARE PENTRU ZILE NELUCRĂTOARE   ###
+        # ######################################################################
         
         # Inițializare culori implicite
         self.default_colors = {
@@ -499,6 +527,151 @@ class NotarialScheduler(QMainWindow):
             print(f"Eroare la restaurarea poziției ferestrei: {e}")
         
         return False
+
+    # ######################################################################
+    # ### START METODE PENTRU GESTIONAREA ZILELOR NELUCRĂTOARE ###
+    # ######################################################################
+
+    def load_non_working_days(self):
+        """Încarcă zilele nelucrătoare din baza de date."""
+        try:
+            self.cursor.execute("SELECT holiday_date FROM non_working_days")
+            # Stocăm ca un set de obiecte datetime.date pentru căutare rapidă
+            self.non_working_days_set = {datetime.datetime.strptime(row[0], '%Y-%m-%d').date() for row in self.cursor.fetchall()}
+            print(f"Zile nelucrătoare încărcate: {len(self.non_working_days_set)}")
+        except Exception as e:
+            print(f"Eroare la încărcarea zilelor nelucrătoare: {e}")
+            self.non_working_days_set = set() # Asigurăm că este un set gol în caz de eroare
+
+    def add_non_working_day(self, date_obj_param):
+        """Adaugă o zi nelucrătoare în baza de date și actualizează setul."""
+        date_obj = None
+        if isinstance(date_obj_param, QDate):
+            date_obj = date_obj_param.toPyDate()
+        elif isinstance(date_obj_param, datetime.datetime):
+            date_obj = date_obj_param.date()
+        elif isinstance(date_obj_param, datetime.date):
+            date_obj = date_obj_param
+        else:
+            print(f"Tip de dată neașteptat în add_non_working_day: {type(date_obj_param)}")
+            return False
+
+        if date_obj and date_obj not in self.non_working_days_set:
+            try:
+                self.cursor.execute("INSERT INTO non_working_days (holiday_date) VALUES (?)", (date_obj.strftime('%Y-%m-%d'),))
+                self.conn.commit()
+                self.non_working_days_set.add(date_obj)
+                print(f"Ziua {date_obj} marcată ca nelucrătoare.")
+                return True
+            except sqlite3.IntegrityError: # Ar trebui să nu se întâmple datorită verificării setului
+                print(f"Ziua {date_obj} este deja marcată ca nelucrătoare (eroare de integritate BD).")
+                # Sincronizăm setul dacă există o discrepanță
+                if date_obj not in self.non_working_days_set: self.non_working_days_set.add(date_obj)
+                return False
+            except Exception as e:
+                print(f"Eroare la adăugarea zilei nelucrătoare {date_obj} în BD: {e}")
+                return False
+        elif date_obj in self.non_working_days_set:
+            print(f"Ziua {date_obj} este deja în setul de zile nelucrătoare.")
+            return False # Deja există, nu e o eroare, dar nu s-a adăugat nimic nou
+        return False
+
+
+    def remove_non_working_day(self, date_obj_param):
+        """Șterge o zi nelucrătoare din baza de date și actualizează setul."""
+        date_obj = None
+        if isinstance(date_obj_param, QDate):
+            date_obj = date_obj_param.toPyDate()
+        elif isinstance(date_obj_param, datetime.datetime):
+            date_obj = date_obj_param.date()
+        elif isinstance(date_obj_param, datetime.date):
+            date_obj = date_obj_param
+        else:
+            print(f"Tip de dată neașteptat în remove_non_working_day: {type(date_obj_param)}")
+            return False
+
+        if date_obj and date_obj in self.non_working_days_set:
+            try:
+                self.cursor.execute("DELETE FROM non_working_days WHERE holiday_date = ?", (date_obj.strftime('%Y-%m-%d'),))
+                self.conn.commit()
+                self.non_working_days_set.remove(date_obj)
+                print(f"Ziua {date_obj} marcată ca lucrătoare.")
+                return True
+            except Exception as e:
+                print(f"Eroare la ștergerea zilei nelucrătoare {date_obj} din BD: {e}")
+                return False
+        elif date_obj:
+            print(f"Ziua {date_obj} nu era în setul de zile nelucrătoare.")
+            return False # Nu era în set, nu e o eroare, dar nu s-a șters nimic
+        return False
+
+    def is_workday(self, date_obj_param):
+        """Verifică dacă o dată este zi lucrătoare."""
+        date_obj = None
+        if isinstance(date_obj_param, datetime.datetime):
+            date_obj = date_obj_param.date()
+        elif isinstance(date_obj_param, datetime.date):
+            date_obj = date_obj_param
+        elif isinstance(date_obj_param, QDate):
+            date_obj = date_obj_param.toPyDate()
+        else:
+            print(f"Tip de dată neașteptat în is_workday: {type(date_obj_param)}")
+            return False # Considerăm nelucrătoare în caz de tip necunoscut
+
+        if date_obj is None: # Ar trebui să nu se întâmple cu logica de mai sus
+            return False
+
+        # Sâmbătă (5) sau Duminică (6)
+        if date_obj.weekday() >= 5:
+            return False
+        if date_obj in self.non_working_days_set:
+            return False
+        return True
+
+    def add_business_days(self, start_date_param, num_days):
+        """Adaugă un număr de zile lucrătoare la o dată de început."""
+        current_date = None
+        if isinstance(start_date_param, datetime.datetime):
+            current_date = start_date_param.date()
+        elif isinstance(start_date_param, datetime.date):
+            current_date = start_date_param
+        elif isinstance(start_date_param, QDate):
+            current_date = start_date_param.toPyDate()
+        else:
+            print(f"Tip de dată neașteptat pentru start_date în add_business_days: {type(start_date_param)}")
+            # Întoarcem data de început ca fallback sau ridicăm o eroare
+            return start_date_param 
+
+        if current_date is None: # Ar trebui să nu se întâmple
+            return start_date_param
+
+        days_added = 0
+        # Verificăm dacă num_days este un întreg pozitiv
+        if not isinstance(num_days, int) or num_days < 0:
+            print(f"Numărul de zile ({num_days}) trebuie să fie un întreg non-negativ.")
+            return current_date # Sau o valoare default / ridică eroare
+
+        # Optimizare: dacă num_days este 0, returnăm direct data de început
+        if num_days == 0:
+            # Trebuie să ne asigurăm că data de început în sine este o zi lucrătoare
+            # dacă cerința este ca rezultatul să fie *următoarea* zi lucrătoare
+            # Pentru "data + X zile lucrătoare", data de start poate fi nelucrătoare.
+            # Ajustăm bucla while să înceapă verificarea de la current_date + 1 zi.
+            # Dacă cerința este "X zile lucrătoare începând de *astăzi inclusiv*", logica e alta.
+            # Presupunem că "data + 45 zile" înseamnă 45 de zile lucrătoare *după* data curentă.
+            pass
+
+
+        temp_date = current_date # Folosim o variabilă temporară pentru incrementare
+        while days_added < num_days:
+            temp_date += timedelta(days=1)
+            if self.is_workday(temp_date):
+                days_added += 1
+        return temp_date
+
+    # ######################################################################
+    # ### END METODE PENTRU GESTIONAREA ZILELOR NELUCRĂTOARE   ###
+    # ######################################################################
 
     def load_document_types(self):
         """Încarcă tipurile de documente din fișierul JSON"""
@@ -728,84 +901,121 @@ class NotarialScheduler(QMainWindow):
             day_date = self.week_start + timedelta(days=i)
             self.create_day_column(i, day_date)
     
-    def create_day_column(self, column, day_date):
-        """Creare coloană pentru o zi"""
-        # Frame pentru ziua respectivă
+    def create_day_column(self, column, day_date): # day_date este un obiect datetime.datetime
+        """Creare coloană pentru o zi, cu tooltip și marcare sărbători"""
         day_frame = QFrame()
         day_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
         day_frame.setLineWidth(2)
-        
-        # Set minimum width for day columns to allow for proper spacing
         day_frame.setMinimumWidth(250)
-        
         self.calendar_grid.addWidget(day_frame, 0, column)
         
-        # Layout pentru ziua respectivă
         day_layout = QVBoxLayout(day_frame)
         day_layout.setContentsMargins(5, 5, 5, 5)
         
-        # Verificăm dacă ziua curentă este astăzi
-        is_today = (day_date.year == datetime.datetime.now().year and 
-                    day_date.month == datetime.datetime.now().month and 
-                    day_date.day == datetime.datetime.now().day)
-        
-        # Antet zi - frame special pentru a permite stilizarea
         header_frame = QFrame()
         header_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
         header_frame.setLineWidth(1)
         header_frame.setAutoFillBackground(True)
         
-        # Stilizare specială pentru ziua curentă
+        current_day_as_date_obj = day_date.date()
+
+        is_today = (current_day_as_date_obj == datetime.datetime.now().date())
+        is_holiday = (current_day_as_date_obj.weekday() < 5 and 
+                      not self.is_workday(current_day_as_date_obj))
+
+        header_frame_palette = QPalette()
+        header_text_style = "color: black;" 
+
         if is_today:
-            # Setăm un fundal distinctiv pentru ziua curentă - albastru-violet
-            palette = QPalette()
-            palette.setColor(QPalette.Background, QColor("#5D4037"))  
-            header_frame.setPalette(palette)
+            header_frame_palette.setColor(QPalette.Background, QColor("#5D4037")) 
+            header_text_style = "color: #FFD700;" 
+        elif is_holiday:
+            header_frame_palette.setColor(QPalette.Background, QColor("red")) 
+            header_text_style = "color: white;" 
         else:
-            # Fundal normal pentru celelalte zile
-            palette = QPalette()
-            palette.setColor(QPalette.Background, QColor("#F0F0F0"))  # Gri foarte deschis
-            header_frame.setPalette(palette)
+            header_frame_palette.setColor(QPalette.Background, QColor("#F0F0F0")) 
         
+        header_frame.setPalette(header_frame_palette)
         day_layout.addWidget(header_frame)
         
-        # Layout pentru antetul zilei
-        header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(5, 5, 5, 5)
+        header_layout_qvb = QVBoxLayout(header_frame) 
+        header_layout_qvb.setContentsMargins(5, 5, 5, 5)
         
-        # Antet zi
-        day_name = self.day_names_ro[day_date.weekday()]
+        day_name_ro = self.day_names_ro[current_day_as_date_obj.weekday()]
         
-        # Text pentru antet - ajustat în funcție de ziua curentă
-        if is_today:
-            header_text = f"{day_date.day} {self.month_names_ro[day_date.month-1]}\n{day_name}"
-            day_header = QLabel(header_text)
-            day_header.setFont(QFont("Arial", 16, QFont.Bold))  # Font mai mare și îngroșat
-            day_header.setStyleSheet("color: #FFD700;")  # Text auriu conform cerințelor
-        else:
-            header_text = f"{day_date.day} {self.month_names_ro[day_date.month-1]}\n{day_name}"
-            day_header = QLabel(header_text)
-            day_header.setFont(QFont("Arial", 14, QFont.Bold))
+        header_text_parts = [
+            f"{current_day_as_date_obj.day} {self.month_names_ro[current_day_as_date_obj.month-1]}",
+            day_name_ro
+        ]
+        if is_holiday:
+            header_text_parts.append("(SĂRBĂTOARE)")
         
-        day_header.setAlignment(Qt.AlignCenter)
-        header_layout.addWidget(day_header)
+        final_header_text = "\n".join(header_text_parts)
+        day_header_label = QLabel(final_header_text) 
         
-        # Zonă cu scroll pentru intervale orare
+        font_size = 16 if is_today else 14
+        day_header_label.setFont(QFont("Arial", font_size, QFont.Bold))
+        day_header_label.setStyleSheet(header_text_style)
+        day_header_label.setAlignment(Qt.AlignCenter)
+        header_layout_qvb.addWidget(day_header_label)
+        
+        # ######################################################################
+        # ### START CALCUL ȘI SETARE TOOLTIP (CU DATA PREEMPȚIUNE ȘI DATA FINALĂ - REVIZUIT) ###
+        # ######################################################################
+
+        # Calculăm DATA PREEMPȚIUNE: +47 zile lucrătoare
+        data_preemptiune = self.add_business_days(day_date, 47) 
+        
+        formatted_data_preemptiune = (f"{data_preemptiune.day} "
+                                      f"{self.month_names_ro[data_preemptiune.month-1]} "
+                                      f"{data_preemptiune.year}")
+        
+        # Calculăm DATA FINALĂ
+        data_finala_intermediara = data_preemptiune + timedelta(days=32)
+        ziua_saptamanii_intermediare = data_finala_intermediara.weekday()
+
+        if ziua_saptamanii_intermediare == 5: # Sâmbătă
+            data_finala_efectiva = data_finala_intermediara + timedelta(days=3) # Marți
+        elif ziua_saptamanii_intermediare == 6: # Duminică
+            data_finala_efectiva = data_finala_intermediara + timedelta(days=2) # Marți
+        else: # Luni-Vineri
+            data_finala_efectiva = data_finala_intermediara
+            while not self.is_workday(data_finala_efectiva):
+                data_finala_efectiva += timedelta(days=1)
+
+        formatted_data_finala = (f"{data_finala_efectiva.day} "
+                                 f"{self.month_names_ro[data_finala_efectiva.month-1]} "
+                                 f"{data_finala_efectiva.year}")
+
+        tooltip_lines = [f"Dată antet: {current_day_as_date_obj.day} {self.month_names_ro[current_day_as_date_obj.month-1]} {current_day_as_date_obj.year}"]
+        if is_holiday:
+            tooltip_lines.append("ZI NELUCRĂTOARE (SĂRBĂTOARE LEGALĂ)")
+        
+        tooltip_lines.append(f"Data preempțiune (+ 45+2 zile lucr.): {formatted_data_preemptiune}")
+        tooltip_lines.append(f"Data finală (preempțiune + 30+2 zile calendaristice, ajustată): {formatted_data_finala}")
+        
+        tooltip_text = "\n".join(tooltip_lines)
+        
+        header_frame.setToolTip(tooltip_text)
+        # Dacă nu ai setat QToolTip.setFont global, poți decomenta și folosi linia de mai jos:
+        # QToolTip.setFont(QFont("Arial", 10)) 
+
+        # ######################################################################
+        # ### END CALCUL ȘI SETARE TOOLTIP                                ###
+        # ######################################################################
+        
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        day_layout.addWidget(scroll_area, 1)  # 1 = stretch factor
+        day_layout.addWidget(scroll_area, 1)
         
-        # Widget pentru intervale orare
         hours_widget = QWidget()
         scroll_area.setWidget(hours_widget)
         hours_layout = QVBoxLayout(hours_widget)
         hours_layout.setContentsMargins(0, 0, 0, 0)
         hours_layout.setSpacing(2)
         
-        # Creare intervale orare
-        self.create_time_slots(hours_layout, day_date)
+        self.create_time_slots(hours_layout, day_date) 
         
-        # Salvare referință la frame
         self.day_frames.append(day_frame)
     
     def create_time_slots(self, parent_layout, day_date):
@@ -2074,21 +2284,19 @@ class NotarialScheduler(QMainWindow):
             self.last_action_label.setText("Ultima intervenție: -")
         
     def show_calendar_dialog(self):
-        """Afișează un dialog cu calendar pentru navigare rapidă"""
+        """Afișează un dialog cu calendar pentru navigare rapidă și marcare zile nelucrătoare"""
         dialog = QDialog(self)
-        dialog.setWindowTitle("Selectează data")
-        dialog.setMinimumWidth(800)  # Mărit de la 400 la 800
-        dialog.setMinimumHeight(600)  # Adăugat înălțime minimă
+        dialog.setWindowTitle("Selectează data / Marchează SĂRBĂTORI LEGALE") 
+        dialog.setMinimumWidth(800)
+        dialog.setMinimumHeight(600)
         
         layout = QVBoxLayout(dialog)
         
-        # Calendar
         calendar_widget = QCalendarWidget()
         calendar_widget.setGridVisible(True)
         calendar_widget.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
-        calendar_widget.setHorizontalHeaderFormat(QCalendarWidget.LongDayNames)  # Nume complete pentru zile
+        calendar_widget.setHorizontalHeaderFormat(QCalendarWidget.LongDayNames)
         
-        # Setăm stilul pentru calendar pentru a-l face mai mare
         calendar_widget.setStyleSheet("""
             QCalendarWidget QToolButton {
                 height: 50px;
@@ -2103,25 +2311,78 @@ class NotarialScheduler(QMainWindow):
             }
             QCalendarWidget QAbstractItemView:enabled {
                 font-size: 18px;
-                height: 50px;
             }
             QCalendarWidget QWidget#qt_calendar_navigationbar {
                 height: 60px;
             }
+            QCalendarWidget QTableView {
+                font-size: 14px; 
+                selection-background-color: lightblue;
+            }
+            QCalendarWidget QTableView::item {
+                height: 35px; 
+                width: 35px;
+            }
         """)
         
-        # Facem ca celulele calendarului să fie mai mari
         calendar_widget.setMinimumSize(780, 500)
+        # Setează data curentă a calendarului la începutul săptămânii afișate
+        current_qdate = QDate(self.week_start.year, self.week_start.month, self.week_start.day)
+        calendar_widget.setSelectedDate(current_qdate) 
+        # Poți de asemenea să setezi luna vizibilă:
+        # calendar_widget.setCurrentPage(self.week_start.year, self.week_start.month)
         
-        # Setează data curentă ca data selectată implicit
-        calendar_widget.setSelectedDate(QDate(self.week_start.year, self.week_start.month, self.week_start.day))
+        # Formatare pentru zilele de sărbătoare (fundal ROȘU)
+        holiday_format = QTextCharFormat()
+        holiday_format.setBackground(QColor("red")) # Roșu pur
+        # Pentru un roșu mai puțin intens, poți folosi:
+        # holiday_format.setBackground(QColor(255, 138, 128)) # Exemplu: #FF8A80
+        # holiday_format.setForeground(QColor("white")) # Opțional: text alb pe fundal roșu
+
+        default_day_format = QTextCharFormat() # Format implicit pentru resetare
+
+        # Aplicăm formatarea la încărcare pentru sărbătorile deja marcate
+        # self.non_working_days_set este deja populat de load_non_working_days() din SQLite
+        for holiday_py_date in self.non_working_days_set:
+            q_date = QDate(holiday_py_date.year, holiday_py_date.month, holiday_py_date.day)
+            calendar_widget.setDateTextFormat(q_date, holiday_format)
+
+        def calendar_context_menu(position):
+            selected_q_date = calendar_widget.selectedDate() # Ia data efectiv selectată de utilizator în widget
+            selected_py_date = selected_q_date.toPyDate()
+
+            menu = QMenu(calendar_widget)
+            is_weekend = selected_py_date.weekday() >= 5 
+
+            if selected_py_date in self.non_working_days_set: # Este o sărbătoare marcată
+                action_mark_workday = menu.addAction("Demarchează sărbătoarea (devine lucrătoare)")
+            elif is_weekend:
+                info_action = menu.addAction("Weekend (nelucrătoare implicit)")
+                info_action.setEnabled(False)
+            else: # Este zi L-V și nu e în setul de sărbători
+                action_mark_holiday = menu.addAction("Marchează ca SĂRBĂTOARE LEGALĂ")
+
+            action = menu.exec_(calendar_widget.mapToGlobal(position))
+
+            if action:
+                original_non_working_days_set_size = len(self.non_working_days_set)
+
+                if action.text() == "Marchează ca SĂRBĂTOARE LEGALĂ":
+                    if self.add_non_working_day(selected_py_date): # Salvează în SQLite
+                        calendar_widget.setDateTextFormat(selected_q_date, holiday_format)
+                elif action.text() == "Demarchează sărbătoarea (devine lucrătoare)":
+                    if self.remove_non_working_day(selected_py_date): # Șterge din SQLite
+                        calendar_widget.setDateTextFormat(selected_q_date, default_day_format)
+                
+                if len(self.non_working_days_set) != original_non_working_days_set_size:
+                    self.refresh_calendar() # Actualizează calendarul principal
+        
+        calendar_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        calendar_widget.customContextMenuRequested.connect(calendar_context_menu)
         
         layout.addWidget(calendar_widget)
         
-        # Butoane
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        
-        # Mărim și butoanele
         ok_button = button_box.button(QDialogButtonBox.Ok)
         ok_button.setFont(QFont("Arial", 14))
         ok_button.setMinimumSize(120, 40)
@@ -2134,12 +2395,12 @@ class NotarialScheduler(QMainWindow):
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
         
-        if dialog.exec_() == QDialog.Accepted:
-            selected_date = calendar_widget.selectedDate().toPyDate()
-            # Convertim la datetime
-            selected_date = datetime.datetime.combine(selected_date, datetime.time())
-            # Calculăm începutul săptămânii pentru data selectată
-            self.week_start = selected_date - timedelta(days=selected_date.weekday())
+        dialog_result = dialog.exec_()
+
+        if dialog_result == QDialog.Accepted:
+            selected_date_py = calendar_widget.selectedDate().toPyDate()
+            selected_date_dt = datetime.datetime.combine(selected_date_py, datetime.time.min)
+            self.week_start = selected_date_dt - timedelta(days=selected_date_dt.weekday())
             self.update_week_label()
             self.refresh_calendar()
 
