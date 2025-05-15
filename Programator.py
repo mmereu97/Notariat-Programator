@@ -965,11 +965,11 @@ class NotarialScheduler(QMainWindow):
 
         # Calculăm DATA PREEMPȚIUNE: +47 zile lucrătoare
         data_preemptiune = self.add_business_days(day_date, 47) 
-        
+            
         formatted_data_preemptiune = (f"{data_preemptiune.day} "
                                       f"{self.month_names_ro[data_preemptiune.month-1]} "
                                       f"{data_preemptiune.year}")
-        
+            
         # Calculăm DATA FINALĂ
         data_finala_intermediara = data_preemptiune + timedelta(days=32)
         ziua_saptamanii_intermediare = data_finala_intermediara.weekday()
@@ -987,18 +987,21 @@ class NotarialScheduler(QMainWindow):
                                  f"{self.month_names_ro[data_finala_efectiva.month-1]} "
                                  f"{data_finala_efectiva.year}")
 
-        tooltip_lines = [f"Dată antet: {current_day_as_date_obj.day} {self.month_names_ro[current_day_as_date_obj.month-1]} {current_day_as_date_obj.year}"]
-        if is_holiday:
+        # Construim textul tooltip-ului FĂRĂ primul rând redundant
+        tooltip_lines = [] # Inițializăm lista goală
+        if is_holiday: # is_holiday este calculat mai sus în funcție
             tooltip_lines.append("ZI NELUCRĂTOARE (SĂRBĂTOARE LEGALĂ)")
-        
-        tooltip_lines.append(f"Data preempțiune (+ 45+2 zile lucr.): {formatted_data_preemptiune}")
+            
+        tooltip_lines.append(f"Data preempțiune (+ 45+2 zile lucrătoare): {formatted_data_preemptiune}")
         tooltip_lines.append(f"Data finală (preempțiune + 30+2 zile calendaristice, ajustată): {formatted_data_finala}")
-        
+            
         tooltip_text = "\n".join(tooltip_lines)
-        
-        header_frame.setToolTip(tooltip_text)
-        # Dacă nu ai setat QToolTip.setFont global, poți decomenta și folosi linia de mai jos:
-        # QToolTip.setFont(QFont("Arial", 10)) 
+            
+        # Dacă tooltip_text este gol (caz improbabil, dar pentru siguranță), nu seta tooltip-ul
+        if tooltip_text:
+            header_frame.setToolTip(tooltip_text)
+        else:
+            header_frame.setToolTip("") # Sau None, pentru a elimina un posibil tooltip vechi
 
         # ######################################################################
         # ### END CALCUL ȘI SETARE TOOLTIP                                ###
