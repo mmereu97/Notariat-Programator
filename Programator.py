@@ -3029,49 +3029,49 @@ class CurrencyWidget(QFrame):
             self.arrow_label.setText("")
             self.update_time_label.setText("")
             return
-        
+
         # Actualizare valoare curs actual
         rate = data.get('rate', 0.0)
         self.rate_label.setText(f"{rate:.4f} Lei")
-        
+
         # Actualizare curs precedent
         prev_rate = data.get('prev_rate', 0.0)
         self.prev_rate_label.setText(f"{prev_rate:.4f} Lei")
-        
+
         # Obținem ora curentă pentru afișarea momentului actualizării
         current_time = datetime.datetime.now().strftime("%H:%M")
         self.update_time_label.setText(f"Actualizat: {current_time}")
-        
+
         # Actualizare variație
         variation = data.get('variation', 0.0)
         direction = data.get('direction', 'same')
-        
-        if direction == 'up':
+
+        if direction == 'up': # Cursul crește (Euro mai scump)
             self.variation_label.setText(f"+{variation:.4f} Lei")
-            self.variation_label.setStyleSheet("color: green;")
-            self.arrow_label.setText("▲")
-            self.arrow_label.setStyleSheet("color: green; font-size: 18px;")
-            
-            # Evidențiem cursul actual ca fiind mai mare
-            self.rate_label.setStyleSheet("color: green;")
-            self.current_header.setStyleSheet("color: green;")
-            
-        elif direction == 'down':
-            self.variation_label.setText(f"{variation:.4f} Lei")
             self.variation_label.setStyleSheet("color: red;")
-            self.arrow_label.setText("▼")
+            self.arrow_label.setText("▲")
             self.arrow_label.setStyleSheet("color: red; font-size: 18px;")
-            
-            # Evidențiem cursul actual ca fiind mai mic
+
+            # Evidențiem cursul actual ca fiind mai mare
             self.rate_label.setStyleSheet("color: red;")
             self.current_header.setStyleSheet("color: red;")
-            
-        else:
+
+        elif direction == 'down': # Cursul scade (Euro mai ieftin)
+            self.variation_label.setText(f"{variation:.4f} Lei")
+            self.variation_label.setStyleSheet("color: green;") # Modificat din albastru înapoi în verde
+            self.arrow_label.setText("▼")
+            self.arrow_label.setStyleSheet("color: green; font-size: 18px;") # Modificat din albastru înapoi în verde
+
+            # Evidențiem cursul actual ca fiind mai mic
+            self.rate_label.setStyleSheet("color: green;") # Modificat din albastru înapoi în verde
+            self.current_header.setStyleSheet("color: green;") # Modificat din albastru înapoi în verde
+
+        else: # Cursul rămâne la fel
             self.variation_label.setText("0.0000 Lei")
             self.variation_label.setStyleSheet("color: gray;")
             self.arrow_label.setText("●")
             self.arrow_label.setStyleSheet("color: gray; font-size: 18px;")
-            
+
             # Resetăm stilurile
             self.rate_label.setStyleSheet("color: black;")
             self.current_header.setStyleSheet("color: black;")
