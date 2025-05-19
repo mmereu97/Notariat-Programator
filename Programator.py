@@ -576,7 +576,6 @@ class NotarialScheduler(QMainWindow):
             return False # Deja există, nu e o eroare, dar nu s-a adăugat nimic nou
         return False
 
-
     def remove_non_working_day(self, date_obj_param):
         """Șterge o zi nelucrătoare din baza de date și actualizează setul."""
         date_obj = None
@@ -867,13 +866,23 @@ class NotarialScheduler(QMainWindow):
         calendar_btn = QPushButton("Calendar")
         calendar_btn.setFixedHeight(50)
         calendar_btn.setFont(QFont("Arial", 12))
+        calendar_btn.setMinimumWidth(120)  # MODIFICAT: Lățime minimă adăugată
         calendar_btn.clicked.connect(self.show_calendar_dialog)
         header_layout.addWidget(calendar_btn)
+
+        # Buton "Azi" pentru a reveni la săptămâna curentă
+        today_btn = QPushButton("Azi")
+        today_btn.setFixedHeight(50)
+        today_btn.setFont(QFont("Arial", 12))
+        today_btn.setMinimumWidth(100) # Am adăugat și aici o lățime minimă pentru consistență
+        today_btn.clicked.connect(self.go_to_today) 
+        header_layout.addWidget(today_btn)
         
         # Buton adăugare tip document
         add_doc_type_btn = QPushButton("Adaugă tip document")
         add_doc_type_btn.setFixedHeight(50)
         add_doc_type_btn.setFont(QFont("Arial", 12))
+        add_doc_type_btn.setMinimumWidth(220)  # MODIFICAT: Lățime minimă adăugată și mărită
         add_doc_type_btn.clicked.connect(self.add_document_type)
         header_layout.addWidget(add_doc_type_btn)
         
@@ -2039,6 +2048,13 @@ class NotarialScheduler(QMainWindow):
         self.week_start += timedelta(days=7)
         self.update_week_label()
         self.refresh_calendar()
+
+    def go_to_today(self): # <<< AICI POȚI ADĂUGA NOUA METODĂ
+        """Navigare la săptămâna curentă"""
+        self.current_date = datetime.datetime.now()
+        self.week_start = self.current_date - timedelta(days=self.current_date.weekday())
+        self.update_week_label()
+        self.refresh_calendar()
     
     def update_week_label(self):
         """Actualizare etichetă săptămână cu datele săptămânii curente"""
@@ -2815,7 +2831,6 @@ class EditableLabel(QLabel):
                         "Eroare",
                         f"Nu s-a putut redenumi tipul de document: {e}"
                     )
-
 
 class CurrencyFetcher(QThread):
     """Thread separat pentru preluarea cursului valutar BNR"""
