@@ -11,11 +11,13 @@ import atexit
 import signal
 from datetime import timedelta
 import calendar
-from PyQt5.QtWidgets import (QMenu, QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                            QHBoxLayout, QGridLayout, QLabel, QPushButton, 
-                            QFrame, QScrollArea, QComboBox, QLineEdit, 
+from PyQt5.QtWidgets import (QMenu, QApplication, QMainWindow, QWidget, QVBoxLayout,
+                            QHBoxLayout, QGridLayout, QLabel, QPushButton,
+                            QFrame, QScrollArea, QComboBox, QLineEdit,
                             QDialog, QDialogButtonBox, QMessageBox, QFormLayout,
-                            QCalendarWidget, QCheckBox, QTextEdit, QToolTip)
+                            QCalendarWidget, QCheckBox, QTextEdit, QToolTip,                          # --- ÎNCEPUT IMPORTURI LIPSA ---
+                            QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+                            QSpacerItem, QSizePolicy)
 from PyQt5.QtCore import Qt, QSize, QDate, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon, QTextCharFormat
 
@@ -206,6 +208,287 @@ class AddDocumentTypeDialog(QDialog):
         """Returnează numele tipului de document introdus"""
         return self.doc_type_entry.text()
 
+class EventsManagementDialog(QDialog):
+    """Dialog pentru gestionarea evenimentelor (aniversări, memento-uri etc.)"""
+    def __init__(self, parent_scheduler):
+        super().__init__(parent_scheduler)
+        self.parent_scheduler = parent_scheduler # Păstrăm o referință la fereastra principală
+
+        self.setWindowTitle("Gestionare Evenimente")
+        self.setMinimumSize(1000, 700)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        # Titlu
+        title_label = QLabel("Gestionare Evenimente")
+        title_label.setFont(QFont("Arial", 16, QFont.Bold))
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+
+        # Formular pentru adăugare/editare
+        form_group = QWidget() # Folosim un QWidget pentru a grupa elementele formularului
+        form_layout = QFormLayout(form_group)
+        form_layout.setLabelAlignment(Qt.AlignRight)
+        form_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        form_layout.setSpacing(10) # Spațiere între label și câmp
+
+        # Data evenimentului
+        self.date_edit = QCalendarWidget(self)
+        self.date_edit.setGridVisible(True)
+        self.date_edit.setMaximumHeight(300) # O înălțime rezonabilă pentru calendar
+        self.date_edit.setMinimumWidth(400) # Lățime minimă
+        form_layout.addRow("Data eveniment:", self.date_edit)
+
+        # Descriere eveniment
+        self.description_edit = QTextEdit(self)
+        self.description_edit.setFont(QFont("Arial", 11))
+        self.description_edit.setPlaceholderText("Introduceți descrierea evenimentului (ex: Ziua X, Expirare ITP)")
+        self.description_edit.setFixedHeight(80)
+        form_layout.addRow("Descriere:", self.description_edit)
+
+        # Recurență
+        self.recurring_checkbox = QCheckBox("Eveniment recurent (anual)", self)
+        self.recurring_checkbox.setFont(QFont("Arial", 11))
+        form_layout.addRow(self.recurring_checkbox) # Adăugăm direct checkbox-ul
+
+        layout.addWidget(form_group) # Adăugăm widget-ul grup la layout-ul principal
+
+        # Butoane pentru formular
+        form_buttons_layout = QHBoxLayout()
+        self.add_event_btn = QPushButton(QIcon.fromTheme("list-add", QIcon("fallback_add_icon.png")), "Adaugă Eveniment Nou") # Adaugă un fallback icon
+        self.add_event_btn.setFont(QFont("Arial", 11, QFont.Bold))
+        self.add_event_btn.setIconSize(QSize(24,24))
+        self.add_event_btn.clicked.connect(self.add_event)
+        form_buttons_layout.addWidget(self.add_event_btn)
+
+        self.save_event_btn = QPushButton(QIcon.fromTheme("document-save", QIcon("fallback_save_icon.png")), "Salvează Modificări")
+        self.save_event_btn.setFont(QFont("Arial", 11, QFont.Bold))
+        self.save_event_btn.setIconSize(QSize(24,24))
+        self.save_event_btn.setEnabled(False) # Inițial dezactivat
+        self.save_event_btn.clicked.connect(self.save_event)
+        form_buttons_layout.addWidget(self.save_event_btn)
+
+        self.clear_form_btn = QPushButton(QIcon.fromTheme("edit-clear", QIcon("fallback_clear_icon.png")), "Curăță Formular")
+        self.clear_form_btn.setFont(QFont("Arial", 11))
+        self.clear_form_btn.setIconSize(QSize(24,24))
+        self.clear_form_btn.clicked.connect(self.clear_form)
+        form_buttons_layout.addWidget(self.clear_form_btn)
+
+        form_buttons_layout.addStretch(1) # Împinge butoanele la stânga
+        layout.addLayout(form_buttons_layout)
+
+
+        # Tabel pentru afișarea evenimentelor
+        self.events_table = QTableWidget(self)
+        self.events_table.setColumnCount(5) # ID, Data, Descriere, Recurent, Acțiuni
+        self.events_table.setHorizontalHeaderLabels(["ID", "Data", "Descriere", "Recurent", "Acțiuni"])
+        
+        # Setarea modului de redimensionare pentru coloane
+        self.events_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch) # ID (va fi ascuns)
+        self.events_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents) # Data
+        self.events_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch) # Descriere - ia spațiul rămas
+        self.events_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents) # Recurent
+        self.events_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents) # Acțiuni
+
+        self.events_table.setColumnHidden(0, True) # Ascundem coloana ID
+
+        self.events_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.events_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.events_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.events_table.itemSelectionChanged.connect(self.load_selected_event_to_form)
+        self.events_table.setSortingEnabled(True)
+
+        layout.addWidget(self.events_table)
+
+        # Butoane de dialog (Închide)
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        close_button = self.button_box.button(QDialogButtonBox.Close)
+        if close_button: # Verifică dacă butonul a fost creat
+            close_button.setText("Închide")
+            close_button.setFont(QFont("Arial", 11, QFont.Bold))
+            close_button.setMinimumSize(120, 40)
+
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
+
+        self.current_event_id = None
+        self.load_events_to_table()
+        self.clear_form()
+
+    def load_events_to_table(self):
+        self.events_table.setSortingEnabled(False) # Dezactivăm sortarea pe durata încărcării
+        self.events_table.setRowCount(0)
+        events = self.parent_scheduler.get_all_events()
+
+        for event_data in events:
+            row_position = self.events_table.rowCount()
+            self.events_table.insertRow(row_position)
+
+            event_id, event_date_str, description, is_recurring, _, _ = event_data
+
+            try:
+                date_obj = datetime.datetime.strptime(event_date_str, '%Y-%m-%d').date()
+                formatted_date_str = date_obj.strftime('%d ')
+                month_index = date_obj.month - 1
+                if 0 <= month_index < len(self.parent_scheduler.month_names_ro):
+                    formatted_date_str += self.parent_scheduler.month_names_ro[month_index]
+                else: # Fallback dacă indexul e greșit
+                    formatted_date_str += date_obj.strftime('%B') # Numele lunii în engleză
+                formatted_date_str += date_obj.strftime(' %Y')
+            except ValueError:
+                formatted_date_str = event_date_str # Fallback
+
+            id_item = QTableWidgetItem(str(event_id))
+            date_item = QTableWidgetItem(formatted_date_str)
+            desc_item = QTableWidgetItem(description)
+            rec_item = QTableWidgetItem("Da" if is_recurring else "Nu")
+            rec_item.setTextAlignment(Qt.AlignCenter)
+
+            self.events_table.setItem(row_position, 0, id_item)
+            self.events_table.setItem(row_position, 1, date_item)
+            self.events_table.setItem(row_position, 2, desc_item)
+            self.events_table.setItem(row_position, 3, rec_item)
+            
+            # Buton Ștergere
+            delete_btn_widget = QWidget()
+            delete_btn_layout = QHBoxLayout(delete_btn_widget)
+            delete_btn_layout.setContentsMargins(0,0,0,0) # Fără margini interne
+            delete_btn_layout.setAlignment(Qt.AlignCenter) # Aliniază butonul în centru
+            delete_btn = QPushButton(QIcon.fromTheme("edit-delete", QIcon("fallback_delete_icon.png")), "Șterge")
+            delete_btn.setFont(QFont("Arial", 10))
+            delete_btn.setStyleSheet("color: red;")
+            delete_btn.setFixedSize(QSize(80,28)) # Dimensiune fixă pentru buton
+            delete_btn.clicked.connect(lambda checked, eid=event_id: self.delete_event(eid))
+            delete_btn_layout.addWidget(delete_btn)
+            self.events_table.setCellWidget(row_position, 4, delete_btn_widget)
+            self.events_table.setRowHeight(row_position, 35) # Înălțime rând
+
+        self.events_table.setSortingEnabled(True)
+        self.events_table.sortByColumn(1, Qt.DescendingOrder) # Sortează după data (coloana 1)
+
+    def load_selected_event_to_form(self):
+        selected_rows = self.events_table.selectionModel().selectedRows()
+        if not selected_rows:
+            # self.clear_form() # Nu curățăm formularul dacă doar se deselectează
+            return
+
+        selected_row_index = selected_rows[0].row()
+        
+        # Preluare ID din modelul de date al tabelului (mai sigur decât din textul item-ului)
+        # Presupunem că ID-ul este în prima coloană (index 0)
+        id_item = self.events_table.item(selected_row_index, 0)
+        if not id_item:
+            self.clear_form()
+            return
+            
+        self.current_event_id = int(id_item.text())
+
+        # Căutăm evenimentul în lista completă pentru datele originale
+        original_event_data = None
+        all_events_from_db = self.parent_scheduler.get_all_events() # Preluare directă din BD
+        for ev in all_events_from_db:
+            if ev[0] == self.current_event_id:
+                original_event_data = ev
+                break
+        
+        if not original_event_data:
+            QMessageBox.warning(self, "Eroare", "Evenimentul selectat nu a fost găsit (ID: {self.current_event_id}). Este posibil să fi fost șters recent.")
+            self.clear_form()
+            return
+
+        _, event_date_str, description, is_recurring, _, _ = original_event_data
+
+        try:
+            date_obj = datetime.datetime.strptime(event_date_str, '%Y-%m-%d').date()
+            self.date_edit.setSelectedDate(QDate(date_obj.year, date_obj.month, date_obj.day))
+        except ValueError:
+             QMessageBox.warning(self, "Eroare Data", f"Data evenimentului '{event_date_str}' este invalidă.")
+             self.date_edit.setSelectedDate(QDate.currentDate()) # Fallback
+
+        self.description_edit.setText(description)
+        self.recurring_checkbox.setChecked(bool(is_recurring))
+
+        self.add_event_btn.setEnabled(False)
+        self.save_event_btn.setEnabled(True)
+
+    def clear_form(self):
+        self.current_event_id = None
+        self.date_edit.setSelectedDate(QDate.currentDate())
+        self.description_edit.clear()
+        self.recurring_checkbox.setChecked(False)
+        self.events_table.clearSelection()
+
+        self.add_event_btn.setEnabled(True)
+        self.save_event_btn.setEnabled(False)
+
+    def add_event(self):
+        event_date_py = self.date_edit.selectedDate().toPyDate()
+        event_date_str = event_date_py.strftime('%Y-%m-%d')
+        description = self.description_edit.toPlainText().strip()
+        is_recurring = 1 if self.recurring_checkbox.isChecked() else 0
+
+        if not description:
+            QMessageBox.warning(self, "Lipsă Descriere", "Vă rugăm introduceți o descriere pentru eveniment.")
+            return
+
+        if self.parent_scheduler.add_event_to_db(event_date_str, description, is_recurring):
+            QMessageBox.information(self, "Succes", "Eveniment adăugat cu succes.")
+            self.load_events_to_table()
+            self.clear_form()
+            # self.parent_scheduler.refresh_calendar() # Se face la închiderea dialogului
+        else:
+            # Mesajul de eroare e deja afișat de add_event_to_db
+            pass
+
+    def save_event(self):
+        if self.current_event_id is None:
+            return
+
+        event_date_py = self.date_edit.selectedDate().toPyDate()
+        event_date_str = event_date_py.strftime('%Y-%m-%d')
+        description = self.description_edit.toPlainText().strip()
+        is_recurring = 1 if self.recurring_checkbox.isChecked() else 0
+
+        if not description:
+            QMessageBox.warning(self, "Lipsă Descriere", "Vă rugăm introduceți o descriere pentru eveniment.")
+            return
+
+        if self.parent_scheduler.update_event_in_db(self.current_event_id, event_date_str, description, is_recurring):
+            QMessageBox.information(self, "Succes", "Eveniment actualizat cu succes.")
+            self.load_events_to_table()
+            self.clear_form()
+            # self.parent_scheduler.refresh_calendar() # Se face la închiderea dialogului
+        else:
+            # Mesajul de eroare e deja afișat de update_event_in_db
+            pass
+
+    def delete_event(self, event_id):
+        reply = QMessageBox.question(self, "Confirmare Ștergere",
+                                     "Sunteți sigur că doriți să ștergeți acest eveniment?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            if self.parent_scheduler.delete_event_from_db(event_id):
+                QMessageBox.information(self, "Succes", "Eveniment șters cu succes.")
+                self.load_events_to_table()
+                # Dacă evenimentul șters era cel selectat, curățăm formularul
+                if self.current_event_id == event_id:
+                    self.clear_form()
+                # self.parent_scheduler.refresh_calendar() # Se face la închiderea dialogului
+            else:
+                # Mesajul de eroare e deja afișat de delete_event_from_db
+                pass
+
+    def reject(self):
+        self.parent_scheduler.refresh_calendar() # Actualizează calendarul principal la închidere
+        super().reject()
+
+    # accept() nu este necesar dacă singurul buton standard este "Close" (care declanșează reject)
+    # def accept(self):
+    #     self.parent_scheduler.refresh_calendar()
+    #     super().accept()
+
 class NotarialScheduler(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -307,18 +590,18 @@ class NotarialScheduler(QMainWindow):
         print("Inițializare bază de date...")
         self.conn = sqlite3.connect('notarial_scheduler.db')
         self.cursor = self.conn.cursor()
-        
+
         # Verifică dacă tabelul appointments există
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='appointments'")
         table_exists = self.cursor.fetchone()
         print(f"Tabelul appointments există: {table_exists is not None}")
-        
+
         if table_exists:
             # Verifică dacă noile coloane există
             self.cursor.execute("PRAGMA table_info(appointments)")
             columns = [col[1] for col in self.cursor.fetchall()]
             print(f"Coloane existente în tabelul appointments: {columns}")
-            
+
             # Adaugă coloanele lipsă dacă e necesar
             if 'status' not in columns:
                 print("Adăugare coloană 'status'")
@@ -338,7 +621,7 @@ class NotarialScheduler(QMainWindow):
             if 'observations' not in columns:
                 print("Adăugare coloană 'observations'")
                 self.cursor.execute('ALTER TABLE appointments ADD COLUMN observations TEXT')
-            
+
             self.conn.commit()
         else:
             # Creare tabel programări dacă nu există
@@ -365,7 +648,7 @@ class NotarialScheduler(QMainWindow):
         # ######################################################################
         # ### START MODIFICARE PENTRU ZILE NELUCRĂTOARE ###
         # ######################################################################
-        
+
         # Creare tabel pentru zile nelucrătoare dacă nu există
         print("Creare tabel non_working_days (dacă nu există)")
         self.cursor.execute('''
@@ -376,19 +659,32 @@ class NotarialScheduler(QMainWindow):
         self.conn.commit()
 
         # Inițializăm setul de zile nelucrătoare (va fi populat de load_non_working_days)
-        self.non_working_days_set = set() 
-        
-        # Încărcăm zilele nelucrătoare la pornire
-        # Metoda load_non_working_days() va fi definită mai târziu.
-        # Deocamdată, ne asigurăm că este apelată.
-        # Dacă rulezi codul înainte de a defini metoda, va da eroare.
-        # Vom adăuga definiția metodei în Pasul 2.
-        self.load_non_working_days() 
+        self.non_working_days_set = set()
+        self.load_non_working_days()
 
         # ######################################################################
         # ### END MODIFICARE PENTRU ZILE NELUCRĂTOARE   ###
         # ######################################################################
-        
+
+        # ######################################################################
+        # ### START MODIFICARE PENTRU EVENIMENTE (NOU) ###
+        # ######################################################################
+        print("Creare tabel events (dacă nu există)")
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_date DATE NOT NULL,
+            description TEXT NOT NULL,
+            is_recurring INTEGER DEFAULT 0, -- 0 pentru False, 1 pentru True
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT
+        )
+        ''')
+        self.conn.commit()
+        # ######################################################################
+        # ### END MODIFICARE PENTRU EVENIMENTE   ###
+        # ######################################################################
+
         # Inițializare culori implicite
         self.default_colors = {
             "color1": "#81C784",  # Verde (culoarea originală)
@@ -396,7 +692,7 @@ class NotarialScheduler(QMainWindow):
             "color3": "#90CAF9",  # Albastru deschis
             "color4": "#CE93D8"   # Mov deschis
         }
-        
+
         # Inițializare nume culori implicite
         self.color_names = {
             "color1": "Verde",
@@ -404,23 +700,23 @@ class NotarialScheduler(QMainWindow):
             "color3": "Albastru",
             "color4": "Mov"
         }
-        
+
         # Culorile actuale (vor fi încărcate din JSON)
         self.colors = self.default_colors.copy()
-        
+
         # Document colors - înlocuiește highlighted_types
         self.document_colors = {}  # Exemplu: {"Succesiune": "color1", "Donație": "color2"}
-        
+
         # Încercare încărcare tipuri documente din JSON
         json_loaded = self.load_document_types_from_json()
-        
+
         # Dacă nu am reușit să încărcăm din JSON, folosim lista implicită și creăm JSON-ul
         if not json_loaded:
             print("Nu s-au găsit tipuri de documente în JSON, folosim lista implicită")
-            
+
             # Inițializăm document_colors (fostul highlighted_types)
             self.document_colors = {"Succesiune": "color1"}
-            
+
             # Salvăm în JSON pentru utilizare viitoare
             self.save_document_types_to_json()
 
@@ -672,6 +968,130 @@ class NotarialScheduler(QMainWindow):
     # ### END METODE PENTRU GESTIONAREA ZILELOR NELUCRĂTOARE   ###
     # ######################################################################
 
+    # --- START METODE PENTRU GESTIONAREA EVENIMENTELOR (NOU) ---
+
+    def show_events_management_dialog(self):
+        """Afișează dialogul pentru gestionarea evenimentelor."""
+        dialog = EventsManagementDialog(self)
+        dialog.exec_()
+        # Refresh-ul calendarului este gestionat în metodele reject/accept ale dialogului
+
+    def add_event_to_db(self, event_date_str, description, is_recurring):
+        """Adaugă un eveniment nou în baza de date."""
+        try:
+            self.cursor.execute('''
+                INSERT INTO events (event_date, description, is_recurring, created_by)
+                VALUES (?, ?, ?, ?)
+            ''', (event_date_str, description, is_recurring, self.computer_name))
+            self.conn.commit()
+            print(f"Eveniment adăugat: {event_date_str} - {description}")
+            # Logare intervenție
+            self.log_intervention(f"EVENIMENT ADĂUGAT: '{description}' pentru data {event_date_str}{' (recurent)' if is_recurring else ''} de către {self.computer_name}")
+            return True
+        except sqlite3.Error as e:
+            print(f"Eroare SQLite la adăugarea evenimentului în BD: {e}")
+            QMessageBox.critical(self, "Eroare Bază de Date", f"Nu s-a putut adăuga evenimentul:\n{e}")
+            return False
+        except Exception as e:
+            print(f"Eroare generală la adăugarea evenimentului în BD: {e}")
+            QMessageBox.critical(self, "Eroare Necunoscută", f"A apărut o eroare la adăugarea evenimentului:\n{e}")
+            return False
+
+
+    def update_event_in_db(self, event_id, event_date_str, description, is_recurring):
+        """Actualizează un eveniment existent în baza de date."""
+        try:
+            self.cursor.execute('''
+                UPDATE events
+                SET event_date = ?, description = ?, is_recurring = ?
+                WHERE id = ?
+            ''', (event_date_str, description, is_recurring, event_id))
+            self.conn.commit()
+            print(f"Eveniment actualizat ID {event_id}: {event_date_str} - {description}")
+            self.log_intervention(f"EVENIMENT MODIFICAT (ID: {event_id}): '{description}' pentru data {event_date_str}{' (recurent)' if is_recurring else ''} de către {self.computer_name}")
+            return True
+        except sqlite3.Error as e:
+            print(f"Eroare SQLite la actualizarea evenimentului ID {event_id} în BD: {e}")
+            QMessageBox.critical(self, "Eroare Bază de Date", f"Nu s-a putut actualiza evenimentul:\n{e}")
+            return False
+        except Exception as e:
+            print(f"Eroare generală la actualizarea evenimentului ID {event_id} în BD: {e}")
+            QMessageBox.critical(self, "Eroare Necunoscută", f"A apărut o eroare la actualizarea evenimentului:\n{e}")
+            return False
+
+    def delete_event_from_db(self, event_id):
+        """Șterge un eveniment din baza de date."""
+        try:
+            # Preluăm descrierea pentru logare înainte de ștergere
+            self.cursor.execute("SELECT description, event_date, is_recurring FROM events WHERE id = ?", (event_id,))
+            event_details = self.cursor.fetchone()
+            desc_for_log = f"ID {event_id}"
+            if event_details:
+                desc_for_log = f"'{event_details[0]}' (data: {event_details[1]}{', recurent' if event_details[2] else ''}, ID: {event_id})"
+
+            self.cursor.execute('DELETE FROM events WHERE id = ?', (event_id,))
+            self.conn.commit()
+            print(f"Eveniment șters ID {event_id}")
+            self.log_intervention(f"EVENIMENT ȘTERS: {desc_for_log} de către {self.computer_name}")
+            return True
+        except sqlite3.Error as e:
+            print(f"Eroare SQLite la ștergerea evenimentului ID {event_id} din BD: {e}")
+            QMessageBox.critical(self, "Eroare Bază de Date", f"Nu s-a putut șterge evenimentul:\n{e}")
+            return False
+        except Exception as e:
+            print(f"Eroare generală la ștergerea evenimentului ID {event_id} din BD: {e}")
+            QMessageBox.critical(self, "Eroare Necunoscută", f"A apărut o eroare la ștergerea evenimentului:\n{e}")
+            return False
+
+    def get_all_events(self):
+        """Prelucrează toate evenimentele din baza de date."""
+        try:
+            self.cursor.execute('''
+                SELECT id, event_date, description, is_recurring, created_at, created_by
+                FROM events
+                ORDER BY event_date DESC, id DESC
+            ''') # Sortare și după ID pentru consistență
+            return self.cursor.fetchall()
+        except Exception as e:
+            print(f"Eroare la preluarea tuturor evenimentelor: {e}")
+            return []
+
+    def get_events_for_day(self, day_date_obj): # day_date_obj este un obiect datetime.date
+        """Prelucrează evenimentele pentru o anumită zi (inclusiv cele recurente),
+           FĂRĂ a adăuga sufixul '(Anual)' la afișarea în calendar."""
+        events_for_display = []
+        try:
+            # Evenimente non-recurente pentru data exactă
+            self.cursor.execute('''
+                SELECT description
+                FROM events
+                WHERE event_date = ? AND is_recurring = 0
+                ORDER BY id
+            ''', (day_date_obj.strftime('%Y-%m-%d'),))
+            for row in self.cursor.fetchall():
+                events_for_display.append(row[0]) # Doar descrierea
+
+            # Evenimente recurente care se potrivesc cu ziua și luna
+            # Ne asigurăm că anul evenimentului din BD este <= anul zilei afișate
+            day_month_str = day_date_obj.strftime('%m-%d')
+            current_year_str = day_date_obj.strftime('%Y')
+            self.cursor.execute(f'''
+                SELECT description
+                FROM events
+                WHERE strftime('%m-%d', event_date) = ? 
+                  AND is_recurring = 1
+                  AND strftime('%Y', event_date) <= ?
+                ORDER BY id
+            ''', (day_month_str, current_year_str))
+            for row in self.cursor.fetchall():
+                events_for_display.append(row[0]) # MODIFICAT: Doar descrierea, fără "(Anual)"
+
+            return events_for_display
+        except Exception as e:
+            print(f"Eroare la preluarea evenimentelor pentru ziua {day_date_obj}: {e}")
+            return []
+    # --- END METODE PENTRU GESTIONAREA EVENIMENTELOR ---
+
     def load_document_types(self):
         """Încarcă tipurile de documente din fișierul JSON"""
         print("\n--- Încărcare tipuri de documente ---")
@@ -842,50 +1262,59 @@ class NotarialScheduler(QMainWindow):
         """Creare antet cu butoane de navigare și afișare săptămână curentă"""
         header_layout = QHBoxLayout()
         parent_layout.addLayout(header_layout)
-        
-        # Buton săptămâna anterioară (acum primul element)
+
+        # Buton săptămâna anterioară
         prev_btn = QPushButton("←")
         prev_btn.setFixedWidth(80)
         prev_btn.setFixedHeight(50)
         prev_btn.setFont(QFont("Arial", 16))
         prev_btn.clicked.connect(self.prev_week)
         header_layout.addWidget(prev_btn)
-        
-        # Widget curs valutar (acum al doilea element)
+
+        # Widget curs valutar
         currency_widget = CurrencyWidget(self)
         header_layout.addWidget(currency_widget)
-        
+
         # Etichetă săptămână curentă
         self.week_label = QLabel()
         self.week_label.setFont(QFont("Arial", 18, QFont.Bold))
         self.week_label.setAlignment(Qt.AlignCenter)
         self.update_week_label()
         header_layout.addWidget(self.week_label, 1)  # 1 = stretch factor
-        
+
         # Buton calendar pentru navigare rapidă
         calendar_btn = QPushButton("Calendar")
         calendar_btn.setFixedHeight(50)
         calendar_btn.setFont(QFont("Arial", 12))
-        calendar_btn.setMinimumWidth(120)  # MODIFICAT: Lățime minimă adăugată
+        calendar_btn.setMinimumWidth(120)
         calendar_btn.clicked.connect(self.show_calendar_dialog)
         header_layout.addWidget(calendar_btn)
 
-        # Buton "Azi" pentru a reveni la săptămâna curentă
+        # Buton "Azi"
         today_btn = QPushButton("Azi")
         today_btn.setFixedHeight(50)
         today_btn.setFont(QFont("Arial", 12))
-        today_btn.setMinimumWidth(100) # Am adăugat și aici o lățime minimă pentru consistență
-        today_btn.clicked.connect(self.go_to_today) 
+        today_btn.setMinimumWidth(100)
+        today_btn.clicked.connect(self.go_to_today)
         header_layout.addWidget(today_btn)
-        
+
         # Buton adăugare tip document
         add_doc_type_btn = QPushButton("Adaugă tip document")
         add_doc_type_btn.setFixedHeight(50)
         add_doc_type_btn.setFont(QFont("Arial", 12))
-        add_doc_type_btn.setMinimumWidth(220)  # MODIFICAT: Lățime minimă adăugată și mărită
+        add_doc_type_btn.setMinimumWidth(220)
         add_doc_type_btn.clicked.connect(self.add_document_type)
         header_layout.addWidget(add_doc_type_btn)
-        
+
+        # --- START ADAUGARE BUTON EVENIMENTE (NOU) ---
+        events_btn = QPushButton("Evenimente")
+        events_btn.setFixedHeight(50)
+        events_btn.setFont(QFont("Arial", 12))
+        events_btn.setMinimumWidth(150) # Ajustează lățimea dacă este necesar
+        events_btn.clicked.connect(self.show_events_management_dialog)
+        header_layout.addWidget(events_btn)
+        # --- END ADAUGARE BUTON EVENIMENTE ---
+
         # Buton săptămâna următoare
         next_btn = QPushButton("→")
         next_btn.setFixedWidth(80)
@@ -911,123 +1340,164 @@ class NotarialScheduler(QMainWindow):
             self.create_day_column(i, day_date)
     
     def create_day_column(self, column, day_date): # day_date este un obiect datetime.datetime
-        """Creare coloană pentru o zi, cu tooltip și marcare sărbători"""
+        """Creare coloană pentru o zi, cu tooltip, marcare sărbători și evenimente"""
+        # ... (codul de la începutul funcției rămâne la fel) ...
         day_frame = QFrame()
         day_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
         day_frame.setLineWidth(2)
         day_frame.setMinimumWidth(250)
         self.calendar_grid.addWidget(day_frame, 0, column)
-        
+
         day_layout = QVBoxLayout(day_frame)
         day_layout.setContentsMargins(5, 5, 5, 5)
-        
+
         header_frame = QFrame()
-        header_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-        header_frame.setLineWidth(1)
+        header_frame.setFrameStyle(QFrame.NoFrame)
+        header_frame.setLineWidth(0)
         header_frame.setAutoFillBackground(True)
-        
+
         current_day_as_date_obj = day_date.date()
 
         is_today = (current_day_as_date_obj == datetime.datetime.now().date())
-        is_holiday = (current_day_as_date_obj.weekday() < 5 and 
-                      not self.is_workday(current_day_as_date_obj))
+        is_holiday_manually_marked = (current_day_as_date_obj.weekday() < 5 and
+                                     not self.is_workday(current_day_as_date_obj))
 
         header_frame_palette = QPalette()
-        header_text_style = "color: black;" 
+        header_text_color_css = "color: black;"
 
+        # Determinăm culoarea de fundal a header-ului zilei
+        header_bg_color_obj = QColor("#F0F0F0") # Gri deschis standard
         if is_today:
-            header_frame_palette.setColor(QPalette.Background, QColor("#5D4037")) 
-            header_text_style = "color: #FFD700;" 
-        elif is_holiday:
-            header_frame_palette.setColor(QPalette.Background, QColor("red")) 
-            header_text_style = "color: white;" 
-        else:
-            header_frame_palette.setColor(QPalette.Background, QColor("#F0F0F0")) 
+            header_bg_color_obj = QColor("#5D4037") # Maro închis
+            header_text_color_css = "color: #FFD700;" # Auriu
+        elif is_holiday_manually_marked:
+            header_bg_color_obj = QColor("red")
+            header_text_color_css = "color: white;"
         
+        header_frame_palette.setColor(QPalette.Background, header_bg_color_obj)
         header_frame.setPalette(header_frame_palette)
         day_layout.addWidget(header_frame)
-        
-        header_layout_qvb = QVBoxLayout(header_frame) 
-        header_layout_qvb.setContentsMargins(5, 5, 5, 5)
-        
-        day_name_ro = self.day_names_ro[current_day_as_date_obj.weekday()]
-        
-        header_text_parts = [
-            f"{current_day_as_date_obj.day} {self.month_names_ro[current_day_as_date_obj.month-1]}",
-            day_name_ro
-        ]
-        if is_holiday:
-            header_text_parts.append("(SĂRBĂTOARE)")
-        
-        final_header_text = "\n".join(header_text_parts)
-        day_header_label = QLabel(final_header_text) 
-        
-        font_size = 16 if is_today else 14
-        day_header_label.setFont(QFont("Arial", font_size, QFont.Bold))
-        day_header_label.setStyleSheet(header_text_style)
-        day_header_label.setAlignment(Qt.AlignCenter)
-        header_layout_qvb.addWidget(day_header_label)
-        
-        # ######################################################################
-        # ### START CALCUL ȘI SETARE TOOLTIP (CU DATA PREEMPȚIUNE ȘI DATA FINALĂ - REVIZUIT) ###
-        # ######################################################################
 
-        # Calculăm DATA PREEMPȚIUNE: +47 zile lucrătoare
-        data_preemptiune = self.add_business_days(day_date, 47) 
-            
+        header_content_layout = QVBoxLayout(header_frame)
+        header_content_layout.setContentsMargins(5, 3, 5, 3) 
+        header_content_layout.setSpacing(2) # Mărit puțin spațiul între elementele din header
+
+        day_name_ro = self.day_names_ro[current_day_as_date_obj.weekday()]
+        header_date_text = f"{current_day_as_date_obj.day} {self.month_names_ro[current_day_as_date_obj.month-1]}"
+        
+        day_header_label_date = QLabel(header_date_text)
+        day_header_label_dayname = QLabel(day_name_ro)
+
+        font_size_header = 15 if is_today else 13 
+        common_font_header = QFont("Arial", font_size_header, QFont.Bold)
+        
+        day_header_label_date.setFont(common_font_header)
+        day_header_label_date.setStyleSheet(header_text_color_css + "background-color: transparent;")
+        day_header_label_date.setAlignment(Qt.AlignCenter)
+        header_content_layout.addWidget(day_header_label_date)
+        
+        day_header_label_dayname.setFont(common_font_header)
+        day_header_label_dayname.setStyleSheet(header_text_color_css + "background-color: transparent;")
+        day_header_label_dayname.setAlignment(Qt.AlignCenter)
+        header_content_layout.addWidget(day_header_label_dayname)
+
+        if is_holiday_manually_marked:
+            holiday_label = QLabel("SĂRBĂTOARE LEGALĂ")
+            holiday_font = QFont("Arial", 12, QFont.Bold, italic=True) 
+            holiday_label.setFont(holiday_font)
+            sarbatoare_text_color = "white" if not is_today else "#FFD700" 
+            holiday_label.setStyleSheet(f"color: {sarbatoare_text_color}; background-color: transparent; padding: 0px; margin-top: 1px;")
+            holiday_label.setAlignment(Qt.AlignCenter)
+            header_content_layout.addWidget(holiday_label)
+
+        events_today = self.get_events_for_day(current_day_as_date_obj)
+        if events_today:
+            for event_desc in events_today:
+                event_label = QLabel(event_desc)
+                # --- FONT EVENIMENT (presupunem că e 12pt acum) ---
+                event_font = QFont("Arial", 12, QFont.DemiBold) # Sau QFont.Normal dacă DemiBold e prea gros
+                event_label.setFont(event_font)
+                
+                # --- STILIZARE EVENIMENT CU FUNDAL ȘI CHENAR (spre MOV) ---
+                
+                # OPȚIUNEA 1: Mov Lavandă Deschis (semi-transparent)
+                #event_bg_color = "rgba(230, 230, 250, 0.85)" # Lavender semi-transparent (85% opacitate)
+                #event_text_color_name = "#483D8B" # DarkSlateBlue (un mov închis, ar trebui să meargă bine)
+                #event_border_color_name = "#483D8B" # Sau un gri: "#9370DB" (MediumPurple mai deschis pentru chenar)
+
+                # OPȚIUNEA 2: Mov Prună Deschis (mai opac)
+                event_bg_color = "#DDA0DD" # Plum (Prună deschis) - complet opac
+                event_text_color_name = "black" # Negru pentru contrast maxim pe Plum
+                                                 # Sau un alb: "white" dacă Plum este suficient de închis
+                event_border_color_name = "#BA55D3" # MediumOrchid (un mov puțin mai închis pentru chenar)
+                                                    # Sau chiar "black" pentru chenar
+                
+                # OPȚIUNEA 3: Mov Thistle (Foarte deschis)
+                #event_bg_color = "#D8BFD8" # Thistle - complet opac
+                #event_text_color_name = "#4B0082" # Indigo (un mov foarte închis pentru text)
+                #event_border_color_name = "#8A2BE2" # BlueViolet (pentru chenar)
+
+                event_label.setStyleSheet(
+                    f"color: {event_text_color_name}; "
+                    f"background-color: {event_bg_color}; "
+                    f"border: 1px solid {event_border_color_name}; "
+                    f"border-radius: 3px; "
+                    f"padding: 2px 4px; "
+                    f"margin-top: 2px; "
+                )
+                event_label.setAlignment(Qt.AlignCenter)
+                event_label.setWordWrap(True)
+                header_content_layout.addWidget(event_label)
+        
+        # ... (codul pentru tooltip rămâne la fel) ...
+        data_preemptiune = self.add_business_days(current_day_as_date_obj, 47) 
         formatted_data_preemptiune = (f"{data_preemptiune.day} "
                                       f"{self.month_names_ro[data_preemptiune.month-1]} "
                                       f"{data_preemptiune.year}")
-            
-        # Calculăm DATA FINALĂ
+
         data_finala_intermediara = data_preemptiune + timedelta(days=32)
         ziua_saptamanii_intermediare = data_finala_intermediara.weekday()
-
-        if ziua_saptamanii_intermediare == 5: # Sâmbătă
-            data_finala_efectiva = data_finala_intermediara + timedelta(days=3) # Marți
-        elif ziua_saptamanii_intermediare == 6: # Duminică
-            data_finala_efectiva = data_finala_intermediara + timedelta(days=2) # Marți
-        else: # Luni-Vineri
-            data_finala_efectiva = data_finala_intermediara
-            while not self.is_workday(data_finala_efectiva):
-                data_finala_efectiva += timedelta(days=1)
-
+        data_finala_efectiva = data_finala_intermediara
+        if ziua_saptamanii_intermediare == 5: 
+            data_finala_efectiva += timedelta(days=3) 
+        elif ziua_saptamanii_intermediare == 6: 
+            data_finala_efectiva += timedelta(days=2) 
+        
+        while not self.is_workday(data_finala_efectiva):
+             data_finala_efectiva += timedelta(days=1)
+        
         formatted_data_finala = (f"{data_finala_efectiva.day} "
                                  f"{self.month_names_ro[data_finala_efectiva.month-1]} "
                                  f"{data_finala_efectiva.year}")
 
-        # Construim textul tooltip-ului FĂRĂ primul rând redundant
-        tooltip_lines = [] # Inițializăm lista goală
-        if is_holiday: # is_holiday este calculat mai sus în funcție
-            tooltip_lines.append("ZI NELUCRĂTOARE (SĂRBĂTOARE LEGALĂ)")
-            
-        tooltip_lines.append(f"Data preempțiune (+ 45+2 zile lucrătoare): {formatted_data_preemptiune}")
-        tooltip_lines.append(f"Data finală (preempțiune + 30+2 zile calendaristice, ajustată): {formatted_data_finala}")
-            
+        tooltip_lines = []
+        if is_holiday_manually_marked:
+             tooltip_lines.append("ZI NELUCRĂTOARE (SĂRBĂTOARE LEGALĂ)")
+        elif current_day_as_date_obj.weekday() >= 5 : 
+             tooltip_lines.append("ZI NELUCRĂTOARE (WEEKEND)")
+
+        tooltip_lines.append(f"Data preempțiune (+47 zile lucrătoare): {formatted_data_preemptiune}")
+        tooltip_lines.append(f"Data finală (preempțiune + 32 zile cal., ajustată): {formatted_data_finala}")
+
         tooltip_text = "\n".join(tooltip_lines)
-            
-        # Dacă tooltip_text este gol (caz improbabil, dar pentru siguranță), nu seta tooltip-ul
         if tooltip_text:
             header_frame.setToolTip(tooltip_text)
         else:
-            header_frame.setToolTip("") # Sau None, pentru a elimina un posibil tooltip vechi
+            header_frame.setToolTip("")
 
-        # ######################################################################
-        # ### END CALCUL ȘI SETARE TOOLTIP                                ###
-        # ######################################################################
-        
+        # ... (codul pentru ScrollArea și time_slots rămâne la fel) ...
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        day_layout.addWidget(scroll_area, 1)
-        
+        day_layout.addWidget(scroll_area, 1) 
+
         hours_widget = QWidget()
         scroll_area.setWidget(hours_widget)
         hours_layout = QVBoxLayout(hours_widget)
         hours_layout.setContentsMargins(0, 0, 0, 0)
         hours_layout.setSpacing(2)
-        
+
         self.create_time_slots(hours_layout, day_date) 
-        
+
         self.day_frames.append(day_frame)
     
     def create_time_slots(self, parent_layout, day_date):
