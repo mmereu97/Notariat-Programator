@@ -1453,7 +1453,7 @@ class NotarialScheduler(QMainWindow):
                                  f"{self.month_names_ro[data_finala_efectiva.month-1]} "
                                  f"{data_finala_efectiva.year}")
 
-        # Păstrăm tooltip-ul pentru informații suplimentare
+        # Construim textul pentru tooltip-uri
         tooltip_lines = []
         if is_holiday_manually_marked:
              tooltip_lines.append("ZI NELUCRĂTOARE (SĂRBĂTOARE LEGALĂ)")
@@ -1464,10 +1464,6 @@ class NotarialScheduler(QMainWindow):
         tooltip_lines.append(f"Data finală (preempțiune + 32 zile cal., ajustată): {formatted_data_finala}")
 
         tooltip_text = "\n".join(tooltip_lines)
-        if tooltip_text:
-            header_frame.setToolTip(tooltip_text)
-        else:
-            header_frame.setToolTip("")
 
         # ScrollArea pentru time_slots
         scroll_area = QScrollArea()
@@ -1495,6 +1491,10 @@ class NotarialScheduler(QMainWindow):
         calc_palette.setColor(QPalette.Background, QColor("#E8F5E9"))  # Verde foarte deschis
         calculations_frame.setPalette(calc_palette)
         
+        # Setăm tooltip-ul pe întregul frame de calcule
+        if tooltip_text:
+            calculations_frame.setToolTip(tooltip_text)
+        
         day_layout.addWidget(calculations_frame)
         
         # Layout pentru calculele de date
@@ -1503,10 +1503,13 @@ class NotarialScheduler(QMainWindow):
         calc_layout.setSpacing(2)
         
         # Prima linie - Data preempțiune
-        preemption_label = QLabel(f"Preemp: {formatted_data_preemptiune}")
+        preemption_label = QLabel(f"Preemțiune: {formatted_data_preemptiune}")
         preemption_label.setFont(QFont("Arial", 10, QFont.Bold))
         preemption_label.setStyleSheet("color: #1B5E20;")  # Verde închis
         preemption_label.setAlignment(Qt.AlignCenter)
+        # Setăm tooltip și pe eticheta individuală
+        if tooltip_text:
+            preemption_label.setToolTip(tooltip_text)
         calc_layout.addWidget(preemption_label)
         
         # A doua linie - Data finală
@@ -1514,6 +1517,9 @@ class NotarialScheduler(QMainWindow):
         final_label.setFont(QFont("Arial", 10, QFont.Bold))
         final_label.setStyleSheet("color: #B71C1C;")  # Roșu închis
         final_label.setAlignment(Qt.AlignCenter)
+        # Setăm tooltip și pe eticheta individuală
+        if tooltip_text:
+            final_label.setToolTip(tooltip_text)
         calc_layout.addWidget(final_label)
 
         self.day_frames.append(day_frame)
