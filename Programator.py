@@ -1339,9 +1339,8 @@ class NotarialScheduler(QMainWindow):
             day_date = self.week_start + timedelta(days=i)
             self.create_day_column(i, day_date)
     
-    def create_day_column(self, column, day_date): # day_date este un obiect datetime.datetime
+    def create_day_column(self, column, day_date):
         """Creare coloană pentru o zi, cu tooltip, marcare sărbători și evenimente"""
-        # ... (codul de la începutul funcției rămâne la fel) ...
         day_frame = QFrame()
         day_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
         day_frame.setLineWidth(2)
@@ -1380,7 +1379,7 @@ class NotarialScheduler(QMainWindow):
 
         header_content_layout = QVBoxLayout(header_frame)
         header_content_layout.setContentsMargins(5, 3, 5, 3) 
-        header_content_layout.setSpacing(2) # Mărit puțin spațiul între elementele din header
+        header_content_layout.setSpacing(2)
 
         day_name_ro = self.day_names_ro[current_day_as_date_obj.weekday()]
         header_date_text = f"{current_day_as_date_obj.day} {self.month_names_ro[current_day_as_date_obj.month-1]}"
@@ -1414,29 +1413,13 @@ class NotarialScheduler(QMainWindow):
         if events_today:
             for event_desc in events_today:
                 event_label = QLabel(event_desc)
-                # --- FONT EVENIMENT (presupunem că e 12pt acum) ---
-                event_font = QFont("Arial", 12, QFont.DemiBold) # Sau QFont.Normal dacă DemiBold e prea gros
+                event_font = QFont("Arial", 12, QFont.DemiBold)
                 event_label.setFont(event_font)
                 
-                # --- STILIZARE EVENIMENT CU FUNDAL ȘI CHENAR (spre MOV) ---
+                event_bg_color = "#DDA0DD"
+                event_text_color_name = "black"
+                event_border_color_name = "#BA55D3"
                 
-                # OPȚIUNEA 1: Mov Lavandă Deschis (semi-transparent)
-                #event_bg_color = "rgba(230, 230, 250, 0.85)" # Lavender semi-transparent (85% opacitate)
-                #event_text_color_name = "#483D8B" # DarkSlateBlue (un mov închis, ar trebui să meargă bine)
-                #event_border_color_name = "#483D8B" # Sau un gri: "#9370DB" (MediumPurple mai deschis pentru chenar)
-
-                # OPȚIUNEA 2: Mov Prună Deschis (mai opac)
-                event_bg_color = "#DDA0DD" # Plum (Prună deschis) - complet opac
-                event_text_color_name = "black" # Negru pentru contrast maxim pe Plum
-                                                 # Sau un alb: "white" dacă Plum este suficient de închis
-                event_border_color_name = "#BA55D3" # MediumOrchid (un mov puțin mai închis pentru chenar)
-                                                    # Sau chiar "black" pentru chenar
-                
-                # OPȚIUNEA 3: Mov Thistle (Foarte deschis)
-                #event_bg_color = "#D8BFD8" # Thistle - complet opac
-                #event_text_color_name = "#4B0082" # Indigo (un mov foarte închis pentru text)
-                #event_border_color_name = "#8A2BE2" # BlueViolet (pentru chenar)
-
                 event_label.setStyleSheet(
                     f"color: {event_text_color_name}; "
                     f"background-color: {event_bg_color}; "
@@ -1449,7 +1432,7 @@ class NotarialScheduler(QMainWindow):
                 event_label.setWordWrap(True)
                 header_content_layout.addWidget(event_label)
         
-        # ... (codul pentru tooltip rămâne la fel) ...
+        # Calculăm datele pentru preempțiune și data finală
         data_preemptiune = self.add_business_days(current_day_as_date_obj, 47) 
         formatted_data_preemptiune = (f"{data_preemptiune.day} "
                                       f"{self.month_names_ro[data_preemptiune.month-1]} "
@@ -1470,10 +1453,11 @@ class NotarialScheduler(QMainWindow):
                                  f"{self.month_names_ro[data_finala_efectiva.month-1]} "
                                  f"{data_finala_efectiva.year}")
 
+        # Păstrăm tooltip-ul pentru informații suplimentare
         tooltip_lines = []
         if is_holiday_manually_marked:
              tooltip_lines.append("ZI NELUCRĂTOARE (SĂRBĂTOARE LEGALĂ)")
-        elif current_day_as_date_obj.weekday() >= 5 : 
+        elif current_day_as_date_obj.weekday() >= 5: 
              tooltip_lines.append("ZI NELUCRĂTOARE (WEEKEND)")
 
         tooltip_lines.append(f"Data preempțiune (+47 zile lucrătoare): {formatted_data_preemptiune}")
@@ -1485,7 +1469,7 @@ class NotarialScheduler(QMainWindow):
         else:
             header_frame.setToolTip("")
 
-        # ... (codul pentru ScrollArea și time_slots rămâne la fel) ...
+        # ScrollArea pentru time_slots
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         day_layout.addWidget(scroll_area, 1) 
@@ -1496,7 +1480,41 @@ class NotarialScheduler(QMainWindow):
         hours_layout.setContentsMargins(0, 0, 0, 0)
         hours_layout.setSpacing(2)
 
-        self.create_time_slots(hours_layout, day_date) 
+        self.create_time_slots(hours_layout, day_date)
+        
+        # Adăugăm frame-ul pentru calculele de date la sfârșitul zilei
+        calculations_frame = QFrame()
+        calculations_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
+        calculations_frame.setLineWidth(1)
+        calculations_frame.setMinimumHeight(60)
+        calculations_frame.setMaximumHeight(60)
+        calculations_frame.setAutoFillBackground(True)
+        
+        # Culoare de fundal diferită pentru calculele de date
+        calc_palette = QPalette()
+        calc_palette.setColor(QPalette.Background, QColor("#E8F5E9"))  # Verde foarte deschis
+        calculations_frame.setPalette(calc_palette)
+        
+        day_layout.addWidget(calculations_frame)
+        
+        # Layout pentru calculele de date
+        calc_layout = QVBoxLayout(calculations_frame)
+        calc_layout.setContentsMargins(5, 5, 5, 5)
+        calc_layout.setSpacing(2)
+        
+        # Prima linie - Data preempțiune
+        preemption_label = QLabel(f"Preemp: {formatted_data_preemptiune}")
+        preemption_label.setFont(QFont("Arial", 10, QFont.Bold))
+        preemption_label.setStyleSheet("color: #1B5E20;")  # Verde închis
+        preemption_label.setAlignment(Qt.AlignCenter)
+        calc_layout.addWidget(preemption_label)
+        
+        # A doua linie - Data finală
+        final_label = QLabel(f"Final: {formatted_data_finala}")
+        final_label.setFont(QFont("Arial", 10, QFont.Bold))
+        final_label.setStyleSheet("color: #B71C1C;")  # Roșu închis
+        final_label.setAlignment(Qt.AlignCenter)
+        calc_layout.addWidget(final_label)
 
         self.day_frames.append(day_frame)
     
@@ -1505,16 +1523,22 @@ class NotarialScheduler(QMainWindow):
         # Obținem toate programările pentru ziua curentă
         all_appointments = self.get_day_appointments(day_date)
         
-        # Ore de lucru de la 8 la 20
+        # Ore de lucru de la 8 la 19 (redus de la 20)
         all_hours = []
-        for hour in range(8, 21):
+        for hour in range(8, 20):  # Modificat de la 21 la 20
             all_hours.append(f"{hour}:00")
             
         # Adăugăm orele flexibile din programări
         for app in all_appointments:
             time_str = app[1]  # coloana time din baza de date
             if time_str not in all_hours:
-                all_hours.append(time_str)
+                # Verificăm dacă ora este înainte de 20:00
+                try:
+                    hour = int(time_str.split(':')[0])
+                    if hour < 20:  # Adăugăm doar orele înainte de 20:00
+                        all_hours.append(time_str)
+                except:
+                    all_hours.append(time_str)
         
         # Sortăm toate orele
         all_hours.sort(key=self.sort_time_key)
